@@ -1,0 +1,54 @@
+{
+  "compilerOptions": {
+    /* ✅ الهدف */
+    "target": "ES2020",
+
+    /* ✅ المكتبات */
+    "lib": ["dom", "dom.iterable", "esnext"],
+
+    /* ✅ دعم الجافاسكربت والـ TS */
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+
+    /* ✅ الموديولات */
+    "module": "esnext",
+    "moduleResolution": "bundler",
+
+    /* ✅ تحسينات إضافية */
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "downlevelIteration": true,
+    "forceConsistentCasingInFileNames": true,
+
+    /* ✅ المسارات */
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"],
+      "@config/*": ["config/*"],
+      "@app/*": ["app/*"]
+    },
+
+    /* ✅ بلجنز */
+    "plugins": [{ "name": "next" }],
+
+    /* ✅ output scripts */
+    "outDir": "dist"
+  },
+
+  /* ✅ الملفات اللي رح تنشمل */
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    "scripts/**/*.ts"
+  ],
+
+  /* ✅ استثناء */
+  "exclude": ["node_modules"]
+}

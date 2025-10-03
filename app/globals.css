@@ -1,0 +1,10 @@
+﻿@tailwind base;
+@tailwind components;
+@tailwind utilities;
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+/* لون خلفية بسيط */
+html, body { background: #0A0B1E; color: #fff; }
+
+:root { --bg:#0A0D17; --card:rgba(255,255,255,.04); --stroke:rgba(255,255,255,.12); --muted:rgba(255,255,255,.65); }
+* { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"; }
