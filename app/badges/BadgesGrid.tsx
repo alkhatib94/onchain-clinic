@@ -1,3 +1,4 @@
+// app/badges/BadgesGrid.tsx
 "use client";
 
 import PrescriptionUsage from "./PrescriptionUsage";
@@ -24,14 +25,33 @@ type Props = {
 
   // القيم الأخرى الاختيارية
   uniqueContracts?: number;
-  swaps?: number; stablecoinTxs?: number; usdcTrades?: number; stablecoinTypes?: number; maxSwapUsd?: number;
-  erc20Count?: number; nftCount?: number;
-  totalVolumeEth?: number; gasEth?: number;
-  usedThirdPartyBridge?: boolean; usedNativeBridge?: boolean;
-  relayCount?: number; jumperCount?: number; bungeeCount?: number; acrossCount?: number;
+  swaps?: number;
+  stablecoinTxs?: number;
+  usdcTrades?: number;
+  stablecoinTypes?: number;
+  maxSwapUsd?: number;
+  erc20Count?: number;
+  nftCount?: number;
+  totalVolumeEth?: number;
+  gasEth?: number;
+
+  usedThirdPartyBridge?: boolean;
+  usedNativeBridge?: boolean;
+  relayCount?: number;
+  jumperCount?: number;
+  bungeeCount?: number;
+  acrossCount?: number;
+
   deployedContracts?: number;
-  uniswap?: number; sushi?: number; pancake?: number; aerodrome?: number; aave?: number; limitless?: number; stargate?: number; metamask?: number;
-  lendingAny?: boolean; matcha?: number;
+
+  // SpecialClinics-only (بدون sushi/pancake/limitless)
+  uniswap?: number;
+  aerodrome?: number;
+  aave?: number;
+  stargate?: number;
+  metamask?: number;
+  lendingAny?: boolean;
+  matcha?: number;
 };
 
 export default function BadgesGrid(props: Props) {
@@ -69,11 +89,17 @@ export default function BadgesGrid(props: Props) {
         bungeeCount={props.bungeeCount ?? 0}
         acrossCount={props.acrossCount ?? 0}
       />
+
       <MedicalStaff deployedContracts={props.deployedContracts ?? 0} />
+
       <SpecialClinics
-        uniswap={props.uniswap ?? 0} sushi={props.sushi ?? 0} pancake={props.pancake ?? 0} aerodrome={props.aerodrome ?? 0}
-        aave={props.aave ?? 0} limitless={props.limitless ?? 0} stargate={props.stargate ?? 0} metamask={props.metamask ?? 0}
-        lendingAny={props.lendingAny ?? false} matcha={props.matcha ?? 0}
+        uniswap={props.uniswap ?? 0}
+        aerodrome={props.aerodrome ?? 0}
+        aave={props.aave ?? 0}
+        stargate={props.stargate ?? 0}
+        metamask={props.metamask ?? 0}
+        lendingAny={props.lendingAny ?? false}
+        matcha={props.matcha ?? 0}
       />
     </section>
   );
