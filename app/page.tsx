@@ -12,6 +12,7 @@ import BadgesGrid from "./badges/BadgesGrid";
 import { computeHealth } from "@/app/lib/healthScore";
 import FinalDiagnosisCard from "@/components/FinalDiagnosisCard";
 import DoctorSummary from "@/components/DoctorSummary";
+// مُعطّل مؤقتًا في الواجهة
 import ProgressRadar from "@/components/ProgressRadar";
 
 type Summary = {
@@ -85,10 +86,25 @@ export default function Home() {
     }
     try {
       setLoading(true);
-      const r = await fetch(`/api/summary?address=${addr}`, { cache: "no-store" });
-      const j = await r.json();
-      if (!r.ok || !isSummary(j)) setError(j?.error || "Unexpected API response");
-      else setData(j);
+      const url = `/api/summary?address=${encodeURIComponent(addr)}`;
+      const r = await fetch(url, { cache: "no-store" });
+
+      // تشخيص مفيد في الكونسول (مؤقتًا)
+      const rawText = await r.clone().text();
+      // eslint-disable-next-line no-console
+      console.log("GET", url, "→", r.status, r.statusText);
+      // eslint-disable-next-line no-console
+      console.log("BODY:", rawText);
+
+      let j: any = null;
+      try { j = JSON.parse(rawText); } catch { /* قد لا يكون JSON */ }
+
+      if (!r.ok || !isSummary(j)) {
+        const serverMsg = (j && j.error) ? j.error : rawText || r.statusText || "Unexpected API response";
+        setError(serverMsg);
+        return;
+      }
+      setData(j);
     } catch (e: any) {
       setError(e?.message || "Network error");
     } finally {
@@ -119,7 +135,6 @@ export default function Home() {
   const txCount = (s?.nativeTxs ?? 0) + (s?.tokenTxs ?? 0);
 
   // حساب الصحة الشاملة
-  // ملاحظة: Referrals + Gas لا تؤثر على السكور (مستثناة داخل computeHealth)
   const health = computeHealth({
     walletAgeDays: s?.walletAgeDays ?? 0,
     nativeTxs: s?.nativeTxs ?? 0,
@@ -161,31 +176,30 @@ export default function Home() {
   });
 
   // توحيد شكل البيانات للرادار ليطابق ما يتوقعه ProgressRadar
-type RadarAreas = {
-  history: number;
-  activity: number;
-  variety: number;   // diversity → variety
-  usage: number;
-  costs: number;
-  deployment: number;
-  clinics: number;     // إضافي
-  lifestyle: number;   // إضافي
-};
+  type RadarAreas = {
+    history: number;
+    activity: number;
+    variety: number;   // diversity → variety
+    usage: number;
+    costs: number;
+    deployment: number;
+    clinics: number;     // إضافي
+    lifestyle: number;   // إضافي
+  };
 
-const radarAreas: RadarAreas = {
-  history:     (health as any)?.areas?.history ?? 0,
-  activity:    (health as any)?.areas?.activity ?? 0,
-  variety:
-    (health as any)?.areas?.variety ??
-    (health as any)?.areas?.diversity ??
-    0,
-  usage:       (health as any)?.areas?.usage ?? 0,
-  costs:       (health as any)?.areas?.costs ?? 0,
-  deployment:  (health as any)?.areas?.deployment ?? 0,
-  clinics:     (health as any)?.areas?.clinics ?? 0,     // ← جديد
-  lifestyle:   (health as any)?.areas?.lifestyle ?? 0,   // ← جديد
-};
-
+  const radarAreas: RadarAreas = {
+    history:     (health as any)?.areas?.history ?? 0,
+    activity:    (health as any)?.areas?.activity ?? 0,
+    variety:
+      (health as any)?.areas?.variety ??
+      (health as any)?.areas?.diversity ??
+      0,
+    usage:       (health as any)?.areas?.usage ?? 0,
+    costs:       (health as any)?.areas?.costs ?? 0,
+    deployment:  (health as any)?.areas?.deployment ?? 0,
+    clinics:     (health as any)?.areas?.clinics ?? 0,
+    lifestyle:   (health as any)?.areas?.lifestyle ?? 0,
+  };
 
   return (
     <main className={`${brand.bg} ${brand.text} min-h-screen p-6`}>
@@ -224,10 +238,11 @@ const radarAreas: RadarAreas = {
             weakest={health.weakest}
           />
         </div>
-{/* رادار التقدّم (معطل مؤقتًا) */}
-{/*// <div className="mb-8">*/}
-{/*//   <ProgressRadar areas={radarAreas} />*/}
-{/*// </div>*/}
+
+        {/* رادار التقدّم (معطل مؤقتًا) */}
+        {/* <div className="mb-8">
+          <ProgressRadar areas={radarAreas} />
+        </div> */}
 
         {/* شبكة البادجات */}
         <BadgesGrid
