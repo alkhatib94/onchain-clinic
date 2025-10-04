@@ -224,11 +224,10 @@ const radarAreas: RadarAreas = {
             weakest={health.weakest}
           />
         </div>
-
-        {/* رادار التقدّم */}
-        <div className="mb-8">
-          <ProgressRadar areas={radarAreas} />
-        </div>
+{/* رادار التقدّم (معطل مؤقتًا) */}
+{/*// <div className="mb-8">*/}
+{/*//   <ProgressRadar areas={radarAreas} />*/}
+{/*// </div>*/}
 
         {/* شبكة البادجات */}
         <BadgesGrid
