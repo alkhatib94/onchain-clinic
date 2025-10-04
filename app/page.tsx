@@ -1,7 +1,7 @@
 ﻿// app/page.tsx
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { brand } from "@/config/brand";
 import Header from "./components/Header";
 import WalletBar from "./components/WalletBar";
@@ -74,11 +74,11 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // لإلغاء أي طلب سابق وتجنّب السباقات
+  // للتحكم في السباقات + تذكر آخر عنوان
   const ctrlRef = useRef<AbortController | null>(null);
   const lastAddrRef = useRef<string>("");
 
-  // اقرأ ?address من الرابط بعد mount (بدون useSearchParams)
+  // قراءة ?address من الرابط بعد الـ mount (بدون useSearchParams)
   const [initial, setInitial] = useState<string>("");
   useEffect(() => {
     try {
@@ -86,10 +86,9 @@ export default function Home() {
       const a = (sp.get("address") || "").trim();
       if (a) setInitial(a);
     } catch {}
-    // لا dependencies
   }, []);
 
-  // شغّل تلقائيًا إذا فيه عنوان بالرابط
+  // تشغيل تلقائي إذا كان العنوان موجود بالرابط
   useEffect(() => {
     if (initial && initial.toLowerCase() !== lastAddrRef.current.toLowerCase()) {
       run(initial);
@@ -105,24 +104,23 @@ export default function Home() {
       setError("please enter your wallet");
       return;
     }
-    if (clean.toLowerCase() === lastAddrRef.current.toLowerCase() && data) {
-      return; // نفس العنوان ونفس البيانات موجودة
-    }
+    // لا تعيد الجلب إذا نفس العنوان والبيانات موجودة
+    if (clean.toLowerCase() === lastAddrRef.current.toLowerCase() && data) return;
     lastAddrRef.current = clean;
 
-    // ألغِ الطلب السابق (إن وُجد)
+    // ألغِ أي طلب سابق
     if (ctrlRef.current) ctrlRef.current.abort();
     const ctrl = new AbortController();
     ctrlRef.current = ctrl;
 
-    // حدّث الـ URL بدون إعادة تحميل الصفحة
+    // حدّث URL بهدوء
     try {
       const u = new URL(window.location.href);
       u.searchParams.set("address", clean);
       window.history.replaceState(null, "", u.pathname + "?" + u.searchParams.toString());
     } catch {}
 
-    // مهلة (15s)
+    // مهلة للطلب
     const timeout = setTimeout(() => ctrl.abort(), 15000);
 
     try {
@@ -131,10 +129,7 @@ export default function Home() {
       const apiUrl = new URL("/api/summary", window.location.origin);
       apiUrl.searchParams.set("address", clean);
 
-      const r = await fetch(apiUrl.toString(), {
-        cache: "no-store",
-        signal: ctrl.signal,
-      });
+      const r = await fetch(apiUrl.toString(), { cache: "no-store", signal: ctrl.signal });
 
       let j: any = null;
       try {
@@ -183,7 +178,7 @@ export default function Home() {
 
   const txCount = (s?.nativeTxs ?? 0) + (s?.tokenTxs ?? 0);
 
-  // حساب الصحة الشاملة
+  // حساب الصحة الشاملة (آمن)
   const health = computeHealth({
     walletAgeDays: s?.walletAgeDays ?? 0,
     nativeTxs: s?.nativeTxs ?? 0,
@@ -253,7 +248,7 @@ export default function Home() {
         <WalletBar onCheck={run} loading={loading} />
 
         {error && (
-          <div className="mb-4 px-4 py-3 rounded-xl border border-rose-500/40 bg-rose-500/10">
+          <div className="mb-6 px-4 py-3 rounded-xl border border-rose-500/40 bg-rose-500/10">
             {String(error)}
           </div>
         )}
