@@ -1,26 +1,38 @@
+// app/components/WalletBar.tsx
 "use client";
 import { useState } from "react";
 
-export default function WalletBar({ onCheck }: { onCheck: (addr: string) => void }) {
+type Props = {
+  // نقبل دالة sync أو async
+  onCheck: (addr: string) => void | Promise<void>;
+  // حالة التحميل (اختياري)
+  loading?: boolean;
+};
+
+export default function WalletBar({ onCheck, loading = false }: Props) {
   const [input, setInput] = useState("");
 
+  const submit = async () => {
+    if (!input.trim()) return;
+    await onCheck(input.trim());
+  };
+
   return (
-    <div className="flex justify-center mt-6 mb-10 md:mb-12">
-      <div className="flex w-full max-w-2xl gap-3">
-        <input
-          type="text"
-          placeholder="Enter wallet address or Base name"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          className="flex-1 px-4 py-3 rounded-lg bg-gray-900 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        <button
-          onClick={() => onCheck(input)}
-          className="px-6 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold transition"
-        >
-          Check
-        </button>
-      </div>
+    <div className="mb-6 flex items-center gap-3">
+      <input
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        placeholder="Enter Base address or basename"
+        className="flex-1 px-4 py-3 rounded-xl bg-white/5 border border-white/10 outline-none"
+        disabled={loading}
+      />
+      <button
+        onClick={submit}
+        disabled={loading}
+        className="px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed transition"
+      >
+        {loading ? "Checking…" : "Check"}
+      </button>
     </div>
   );
 }
