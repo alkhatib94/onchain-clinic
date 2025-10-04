@@ -204,40 +204,37 @@ export default function Home() {
 
         {/* شبكة البادجات */}
         <BadgesGrid
-          walletAge={s?.walletAgeDays ?? 0}
-          txCount={txCount}
-          activeDays={s?.uniqueDays ?? 0}
-          txTimestampsUTC={s?.allTxTimestampsUTC ?? []}
-          mainnetLaunchUTC={s?.mainnetLaunchUTC ?? "2023-08-09T00:00:00Z"}
-          holidayDatesUTC={s?.holidayDatesUTC ?? []}
-          uniqueContracts={s?.contracts?.uniqueInteractions ?? 0}
-          totalVolumeEth={s?.volume.eth ?? 0}
-          gasEth={s?.gasEth ?? 0}
-          swaps={s?.swaps ?? 0}
-          stablecoinTxs={s?.stablecoinTxs ?? 0}
-          usdcTrades={s?.usdcTrades ?? 0}
-          stablecoinTypes={s?.stablecoinTypes ?? 0}
-          maxSwapUsd={s?.maxSwapUsd ?? 0}
-          erc20Count={s?.erc20Count ?? 0}
-          nftCount={s?.nftCount ?? 0}
-          usedThirdPartyBridge={s?.usedThirdPartyBridge ?? false}
-          usedNativeBridge={s?.usedNativeBridge ?? false}
-          relayCount={s?.relayCount ?? 0}
-          jumperCount={s?.jumperCount ?? 0}
-          bungeeCount={s?.bungeeCount ?? 0}
-          acrossCount={s?.acrossCount ?? 0}
-          deployedContracts={s?.deployedContracts ?? 0}
-          uniswap={s?.uniswap ?? 0}
-          sushi={s?.sushi ?? 0}
-          pancake={s?.pancake ?? 0}
-          aerodrome={s?.aerodrome ?? 0}
-          aave={s?.aave ?? 0}
-          limitless={s?.limitless ?? 0}
-          stargate={s?.stargate ?? 0}
-          metamask={s?.metamask ?? 0}
-          lendingAny={s?.lendingAny ?? false}
-          matcha={s?.matcha ?? 0}
-        />
+  walletAge={s?.walletAgeDays ?? 0}
+  txCount={txCount}
+  activeDays={s?.uniqueDays ?? 0}
+  txTimestampsUTC={s?.allTxTimestampsUTC ?? []}
+  mainnetLaunchUTC={s?.mainnetLaunchUTC ?? "2023-08-09T00:00:00Z"}
+  holidayDatesUTC={s?.holidayDatesUTC ?? []}
+  uniqueContracts={s?.contracts?.uniqueInteractions ?? 0}
+  totalVolumeEth={s?.volume.eth ?? 0}
+  gasEth={s?.gasEth ?? 0}
+  swaps={s?.swaps ?? 0}
+  stablecoinTxs={s?.stablecoinTxs ?? 0}
+  usdcTrades={s?.usdcTrades ?? 0}
+  stablecoinTypes={s?.stablecoinTypes ?? 0}
+  maxSwapUsd={s?.maxSwapUsd ?? 0}
+  erc20Count={s?.erc20Count ?? 0}
+  nftCount={s?.nftCount ?? 0}
+  usedThirdPartyBridge={s?.usedThirdPartyBridge ?? false}
+  usedNativeBridge={s?.usedNativeBridge ?? false}
+  relayCount={s?.relayCount ?? 0}
+  jumperCount={s?.jumperCount ?? 0}
+  bungeeCount={s?.bungeeCount ?? 0}
+  acrossCount={s?.acrossCount ?? 0}
+  deployedContracts={s?.deployedContracts ?? 0}
+  uniswap={s?.uniswap ?? 0}
+  aerodrome={s?.aerodrome ?? 0}
+  aave={s?.aave ?? 0}
+  stargate={s?.stargate ?? 0}
+  metamask={s?.metamask ?? 0}
+  lendingAny={s?.lendingAny ?? false}
+  matcha={s?.matcha ?? 0}
+/>
       </div>
     </main>
   );
