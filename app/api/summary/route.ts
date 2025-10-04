@@ -33,7 +33,6 @@ const client = createPublicClient({
   transport: http(ALCHEMY_BASE_RPC || RPC_FALLBACK),
 });
 
-
 // ====== أدوات مساعدة عامة ======
 function isHttpUrl(raw?: string) {
   try {
@@ -65,11 +64,22 @@ function bsUrl(p: Record<string, string>) {
   if (BASESCAN_API_KEY) u.searchParams.set("apikey", BASESCAN_API_KEY);
   return u.toString();
 }
-async function basescan(p: Record<string, string>) {
+
+/**
+ * تُعيد إمّا Array (عندما تكون نتيجة لستات معاملات) أو قيمة/كائن كما هو (مثل balance)
+ */
+async function basescan(p: Record<string, string>): Promise<any> {
   const r = await fetchWithTimeout(bsUrl(p));
   const j = await r.json().catch(() => null);
-  return j?.result || [];
+  const res = j?.result;
+  if (Array.isArray(res)) return res;
+  if (res && Array.isArray(res.transactions)) return res.transactions;
+  if (res && Array.isArray(res.transfers)) return res.transfers;
+  return res; // قد يكون string (balance) أو object
 }
+
+/** تطبيع القيم إلى Array دايمًا */
+const ensureArray = <T,>(x: any): T[] => (Array.isArray(x) ? (x as T[]) : []);
 
 // ====== CoinGecko ======
 const DEFAULT_CG_URL = "https://api.coingecko.com/api/v3/simple/price";
@@ -156,40 +166,18 @@ export async function GET(req: NextRequest) {
     }
 
     // --- جلب المعاملات (BaseScan) ---
-    const [normal, erc20, erc721] = await Promise.all([
-      basescan({
-        module: "account",
-        action: "txlist",
-        address,
-        startblock: "0",
-        endblock: "99999999",
-        page: "1",
-        offset: "5000",
-        sort: "asc",
-      }),
-      basescan({
-        module: "account",
-        action: "tokentx",
-        address,
-        startblock: "0",
-        endblock: "99999999",
-        page: "1",
-        offset: "5000",
-        sort: "asc",
-      }),
-      basescan({
-        module: "account",
-        action: "tokennfttx",
-        address,
-        startblock: "0",
-        endblock: "99999999",
-        page: "1",
-        offset: "5000",
-        sort: "asc",
-      }),
+    const [normalRaw, erc20Raw, erc721Raw] = await Promise.all([
+      basescan({ module: "account", action: "txlist", address, startblock: "0", endblock: "99999999", page: "1", offset: "5000", sort: "asc" }),
+      basescan({ module: "account", action: "tokentx", address, startblock: "0", endblock: "99999999", page: "1", offset: "5000", sort: "asc" }),
+      basescan({ module: "account", action: "tokennfttx", address, startblock: "0", endblock: "99999999", page: "1", offset: "5000", sort: "asc" }),
     ]);
 
-    const ok = (normal || []).filter((t: any) => t.isError === "0");
+    // ضمان Arrays قبل الاستخدام
+    const normal = ensureArray<any>(normalRaw);
+    const erc20  = ensureArray<any>(erc20Raw);
+    const erc721 = ensureArray<any>(erc721Raw);
+
+    const ok = normal.filter((t: any) => String(t.isError) === "0");
     const now = Math.floor(Date.now() / 1000);
     const firstTxAt = ok[0] ? Number(ok[0].timeStamp) : null;
     const walletAgeDays = firstTxAt ? Math.floor((now - firstTxAt) / 86400) : 0;
@@ -198,16 +186,12 @@ export async function GET(req: NextRequest) {
     const days = new Set<string>(), weeks = new Set<string>(), months = new Set<string>();
     for (const t of ok) {
       const ts = Number(t.timeStamp);
-      days.add(isoDay(ts));
-      weeks.add(isoWeek(ts));
-      months.add(isoMonth(ts));
+      days.add(isoDay(ts)); weeks.add(isoWeek(ts)); months.add(isoMonth(ts));
     }
-    const uniqueDays = days.size,
-      uniqueWeeks = weeks.size,
-      uniqueMonths = months.size;
+    const uniqueDays = days.size, uniqueWeeks = weeks.size, uniqueMonths = months.size;
 
     const nativeTxs = ok.length;
-    const tokenTxs = (erc20?.length || 0) + (erc721?.length || 0);
+    const tokenTxs = erc20.length + erc721.length;
 
     // العقود المتفاعَل معها
     const toSet = new Set<string>();
@@ -261,7 +245,7 @@ export async function GET(req: NextRequest) {
     // USDC عبر token txs
     const USDC = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
     let usdcAmount = 0;
-    for (const tr of erc20 || []) {
+    for (const tr of erc20) {
       if (String(tr.contractAddress || "").toLowerCase() === USDC) {
         const dec = Number(tr.tokenDecimal || 6);
         usdcAmount += Number(tr.value) / 10 ** dec;
@@ -269,9 +253,12 @@ export async function GET(req: NextRequest) {
     }
     const volumeUsdTotal = volumeEthUSD + usdcAmount * (px.usdc || 1);
 
-    // الرصيد
+    // الرصيد (قد يعود string أو object أو array)
     const balRes = await basescan({ module: "account", action: "balance", address, tag: "latest" });
-    const wei = Array.isArray(balRes) ? balRes?.[0]?.balance || "0" : (balRes as any)?.balance || "0";
+    let wei = "0";
+    if (Array.isArray(balRes)) wei = balRes?.[0]?.balance || "0";
+    else if (balRes && typeof balRes === "object") wei = (balRes as any)?.balance || "0";
+    else if (typeof balRes === "string") wei = balRes;
     const balanceEth = Number(wei) / 1e18;
 
     // ========= Prescription Usage =========
@@ -299,7 +286,7 @@ export async function GET(req: NextRequest) {
     const byHash: Record<string, E20Agg> = {};
     const STABLE_SYMBOLS = new Set(["USDC", "USDBC", "USDT", "DAI", "FRAX", "USDE", "LUSD"]);
 
-    for (const tr of erc20 || []) {
+    for (const tr of erc20) {
       const h = String(tr.hash || tr.transactionHash || "");
       if (!h) continue;
       const from = String(tr.from || "").toLowerCase();
@@ -329,7 +316,7 @@ export async function GET(req: NextRequest) {
     };
 
     const okByHash: Record<string, any> = {};
-    for (const t of ok || []) {
+    for (const t of ok) {
       const h = String(t.hash || "");
       if (h) okByHash[h] = t;
       if (looksLikeSwap(t) && h) swapHashes.add(h);
@@ -340,9 +327,9 @@ export async function GET(req: NextRequest) {
     const swaps = swapHashes.size;
 
     // معاملات الستيبلكوينز / USDC / عدد الأنواع
-    const stableTransfers = (erc20 || []).filter((tr: any) => STABLE_SYMBOLS.has(String(tr.tokenSymbol || "").toUpperCase()));
+    const stableTransfers = erc20.filter((tr: any) => STABLE_SYMBOLS.has(String(tr.tokenSymbol || "").toUpperCase()));
     const stablecoinTxs = stableTransfers.length;
-    const usdcTrades = (erc20 || []).filter((tr: any) => String(tr.tokenSymbol || "").toUpperCase() === "USDC").length;
+    const usdcTrades = erc20.filter((tr: any) => String(tr.tokenSymbol || "").toUpperCase() === "USDC").length;
     const stablecoinTypes = new Set(stableTransfers.map((tr: any) => String(tr.tokenSymbol || "").toUpperCase())).size;
 
     // أكبر صفقة USD
@@ -359,33 +346,33 @@ export async function GET(req: NextRequest) {
     }
 
     // ========= Variety / Imaging =========
-    const erc20Count = new Set((erc20 || []).map((t: any) => String(t.contractAddress || "").toLowerCase())).size;
-    const nftCount = new Set((erc721 || []).map((t: any) => String(t.contractAddress || "").toLowerCase())).size;
+    const erc20Count = new Set(erc20.map((t: any) => String(t.contractAddress || "").toLowerCase())).size;
+    const nftCount = new Set(erc721.map((t: any) => String(t.contractAddress || "").toLowerCase())).size;
 
     // ========= Dosage / Costs =========
     const totalVolumeEth = volumeEth;
-    const gasEth = (ok || []).reduce((s: number, t: any) => {
+    const gasEth = ok.reduce((s: number, t: any) => {
       const gu = Number(t.gasUsed || t.gas || 0);
       const gp = Number(t.gasPrice || 0);
       return s + (gu * gp) / 1e18;
     }, 0);
 
     // ========= Deployed contracts =========
-    const deployedContracts = (ok || []).filter((t: any) => {
+    const deployedContracts = ok.filter((t: any) => {
       const to = String(t.to || "").toLowerCase();
       const created = String((t as any).contractAddress || "");
-      return (to === "" || to === "0x0000000000000000000000000000000000000000") && created && t.isError === "0";
+      return (to === "" || to === "0x0000000000000000000000000000000000000000") && created && String(t.isError) === "0";
     }).length;
 
     // ========= Special Clinics =========
     const allTxsForProto = [
-      ...(ok || []).map((t: any) => ({
+      ...ok.map((t: any) => ({
         to: String(t.to || "").toLowerCase(),
         from: String(t.from || "").toLowerCase(),
         fn: String(t.functionName || "").toLowerCase(),
       })),
-      ...(erc20 || []).map((t: any) => ({ to: String(t.to || "").toLowerCase(), from: String(t.from || "").toLowerCase(), fn: "" })),
-      ...(erc721 || []).map((t: any) => ({ to: String(t.to || "").toLowerCase(), from: String(t.from || "").toLowerCase(), fn: "" })),
+      ...erc20.map((t: any) => ({ to: String(t.to || "").toLowerCase(), from: String(t.from || "").toLowerCase(), fn: "" })),
+      ...erc721.map((t: any) => ({ to: String(t.to || "").toLowerCase(), from: String(t.from || "").toLowerCase(), fn: "" })),
     ];
     function countProto(name: keyof typeof PROTOCOL_ADDRS) {
       const addrs = new Set(PROTOCOL_ADDRS[name].map((a) => a.toLowerCase()));
@@ -431,9 +418,9 @@ export async function GET(req: NextRequest) {
     // ====== Onchain Lifestyle fields ======
     const allTxTimestampsUTC = Array.from(
       new Set<string>([
-        ...(ok || []).map((t: any) => new Date(Number(t.timeStamp) * 1000).toISOString()),
-        ...(erc20 || []).map((t: any) => new Date(Number(t.timeStamp) * 1000).toISOString()),
-        ...(erc721 || []).map((t: any) => new Date(Number(t.timeStamp) * 1000).toISOString()),
+        ...ok.map((t: any) => new Date(Number(t.timeStamp) * 1000).toISOString()),
+        ...erc20.map((t: any) => new Date(Number(t.timeStamp) * 1000).toISOString()),
+        ...erc721.map((t: any) => new Date(Number(t.timeStamp) * 1000).toISOString()),
       ])
     ).sort();
 
@@ -504,7 +491,6 @@ export async function GET(req: NextRequest) {
       { headers: { "content-type": "application/json" } }
     );
   } catch (e: any) {
-    // اطبع للـ Logs الخاصة بـ Vercel
     console.error("summary.error", e);
     return new Response(JSON.stringify({ error: e?.message || "internal error" }), { status: 500 });
   }
