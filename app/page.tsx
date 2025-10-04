@@ -1,19 +1,19 @@
 ﻿// app/page.tsx
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { brand } from "@/config/brand";
 import Header from "./components/Header";
 import WalletBar from "./components/WalletBar";
 import MainReportTable from "./components/MainReportTable";
 import BadgesGrid from "./badges/BadgesGrid";
 
-// نظام الصحة الشامل + كروت التشخيص/الملخص + الرادار
+// نظام الصحة الشامل + كروت التشخيص/الملخص
 import { computeHealth } from "@/app/lib/healthScore";
 import FinalDiagnosisCard from "@/components/FinalDiagnosisCard";
 import DoctorSummary from "@/components/DoctorSummary";
 // مُعطّل مؤقتًا في الواجهة
-import ProgressRadar from "@/components/ProgressRadar";
+// import ProgressRadar from "@/components/ProgressRadar";
 
 type Summary = {
   address: string;
@@ -55,7 +55,7 @@ type Summary = {
 
   deployedContracts?: number;
 
-  // special clinics (قد تأتي من الـ API)
+  // special clinics
   uniswap?: number;
   sushi?: number;
   pancake?: number;
@@ -77,10 +77,24 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // لإلغاء أي طلب سابق وتجنّب الـ race conditions
+  const ctrlRef = useRef<AbortController | null>(null);
+
   const run = async (addr: string) => {
     setError(null);
     setData(null);
-    if (!addr) { setError("please enter your wallet"); return; }
+    if (!addr) {
+      setError("please enter your wallet");
+      return;
+    }
+
+    // ألغِ الطلب السابق (إن وُجد)
+    if (ctrlRef.current) ctrlRef.current.abort();
+    const ctrl = new AbortController();
+    ctrlRef.current = ctrl;
+
+    // مهلة للطلب (15s)
+    const timeout = setTimeout(() => ctrl.abort(), 15000);
 
     try {
       setLoading(true);
@@ -89,27 +103,38 @@ export default function Home() {
       const apiUrl = new URL("/api/summary", window.location.origin);
       apiUrl.searchParams.set("address", addr.trim());
 
-      const r = await fetch(apiUrl.toString(), { cache: "no-store" });
+      const r = await fetch(apiUrl.toString(), {
+        cache: "no-store",
+        signal: ctrl.signal,
+      });
 
-      // تشخيص مفيد (مؤقتًا)
+      // تشخيص مفيد أثناء التطوير
       const rawText = await r.clone().text();
       // eslint-disable-next-line no-console
       console.log("GET", apiUrl.toString(), "→", r.status, r.statusText);
-      // eslint-disable-next-line no-console
-      console.log("BODY:", rawText);
 
       let j: any = null;
-      try { j = JSON.parse(rawText); } catch { /* قد لا يكون JSON */ }
+      try {
+        j = JSON.parse(rawText);
+      } catch {
+        // قد لا يكون JSON (نترك j=null)
+      }
 
       if (!r.ok || !isSummary(j)) {
         const serverMsg = (j && j.error) ? j.error : rawText || r.statusText || "Unexpected API response";
         setError(serverMsg);
         return;
       }
+
       setData(j);
     } catch (e: any) {
+      if (e?.name === "AbortError") {
+        // طلب مُلغى — لا نعرض خطأ للمستخدم
+        return;
+      }
       setError(e?.message || "Network error");
     } finally {
+      clearTimeout(timeout);
       setLoading(false);
     }
   };
@@ -136,7 +161,7 @@ export default function Home() {
 
   const txCount = (s?.nativeTxs ?? 0) + (s?.tokenTxs ?? 0);
 
-  // حساب الصحة الشاملة
+  // حساب الصحة الشاملة (آمن مع القيم الافتراضية)
   const health = computeHealth({
     walletAgeDays: s?.walletAgeDays ?? 0,
     nativeTxs: s?.nativeTxs ?? 0,
@@ -177,30 +202,26 @@ export default function Home() {
     fallbackActiveDays: s?.uniqueDays ?? 0,
   });
 
-  // توحيد شكل البيانات للرادار ليطابق ما يتوقعه ProgressRadar
+  // شكل موحّد (لو فعّلت الرادار لاحقًا)
   type RadarAreas = {
     history: number;
     activity: number;
-    variety: number;   // diversity → variety
+    variety: number;
     usage: number;
     costs: number;
     deployment: number;
-    clinics: number;     // إضافي
-    lifestyle: number;   // إضافي
+    clinics: number;
+    lifestyle: number;
   };
-
   const radarAreas: RadarAreas = {
-    history:     (health as any)?.areas?.history ?? 0,
-    activity:    (health as any)?.areas?.activity ?? 0,
-    variety:
-      (health as any)?.areas?.variety ??
-      (health as any)?.areas?.diversity ??
-      0,
-    usage:       (health as any)?.areas?.usage ?? 0,
-    costs:       (health as any)?.areas?.costs ?? 0,
-    deployment:  (health as any)?.areas?.deployment ?? 0,
-    clinics:     (health as any)?.areas?.clinics ?? 0,
-    lifestyle:   (health as any)?.areas?.lifestyle ?? 0,
+    history: (health as any)?.areas?.history ?? 0,
+    activity: (health as any)?.areas?.activity ?? 0,
+    variety: (health as any)?.areas?.variety ?? (health as any)?.areas?.diversity ?? 0,
+    usage: (health as any)?.areas?.usage ?? 0,
+    costs: (health as any)?.areas?.costs ?? 0,
+    deployment: (health as any)?.areas?.deployment ?? 0,
+    clinics: (health as any)?.areas?.clinics ?? 0,
+    lifestyle: (health as any)?.areas?.lifestyle ?? 0,
   };
 
   return (
@@ -240,7 +261,7 @@ export default function Home() {
           />
         </div>
 
-        {/* رادار التقدّم (معطل مؤقتًا) */}
+        {/* رادار التقدّم (معطّل مؤقتًا) */}
         {/* <div className="mb-8">
           <ProgressRadar areas={radarAreas} />
         </div> */}
