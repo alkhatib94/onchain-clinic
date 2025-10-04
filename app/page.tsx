@@ -78,39 +78,42 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
 
   const run = async (addr: string) => {
-    setError(null);
-    setData(null);
-    if (!addr) {
-      setError("please enter your wallet");
+  setError(null);
+  setData(null);
+  if (!addr) { setError("please enter your wallet"); return; }
+
+  try {
+    setLoading(true);
+
+    // base URL موثوق
+    const base =
+      (process.env.NEXT_PUBLIC_SITE_URL && process.env.NEXT_PUBLIC_SITE_URL.trim()) ||
+      (typeof window !== "undefined" ? window.location.origin : "");
+
+    const url = `${base}/api/summary?address=${encodeURIComponent(addr.trim())}`;
+
+    const r = await fetch(url, { cache: "no-store" });
+
+    const rawText = await r.clone().text();
+    console.log("GET", url, "→", r.status, r.statusText);
+    console.log("BODY:", rawText);
+
+    let j: any = null;
+    try { j = JSON.parse(rawText); } catch {}
+
+    if (!r.ok || !isSummary(j)) {
+      const serverMsg = (j && j.error) ? j.error : rawText || r.statusText || "Unexpected API response";
+      setError(serverMsg);
       return;
     }
-    try {
-      setLoading(true);
-      const url = `/api/summary?address=${encodeURIComponent(addr)}`;
-      const r = await fetch(url, { cache: "no-store" });
+    setData(j);
+  } catch (e: any) {
+    setError(e?.message || "Network error");
+  } finally {
+    setLoading(false);
+  }
+};
 
-      // تشخيص مفيد في الكونسول (مؤقتًا)
-      const rawText = await r.clone().text();
-      // eslint-disable-next-line no-console
-      console.log("GET", url, "→", r.status, r.statusText);
-      // eslint-disable-next-line no-console
-      console.log("BODY:", rawText);
-
-      let j: any = null;
-      try { j = JSON.parse(rawText); } catch { /* قد لا يكون JSON */ }
-
-      if (!r.ok || !isSummary(j)) {
-        const serverMsg = (j && j.error) ? j.error : rawText || r.statusText || "Unexpected API response";
-        setError(serverMsg);
-        return;
-      }
-      setData(j);
-    } catch (e: any) {
-      setError(e?.message || "Network error");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const s: Summary | null = data && isSummary(data) ? data : null;
 

@@ -1,5 +1,7 @@
 ﻿// app/api/summary/route.ts
 import { NextRequest } from "next/server";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 import { createPublicClient, http, isAddress } from "viem";
 import { base } from "viem/chains";
 import { NATIVE_BRIDGE_SENDERS_L2, THIRD_PARTY_BRIDGES } from "@/config/bridges";
