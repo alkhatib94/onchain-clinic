@@ -23,11 +23,16 @@ const BASE_MAINNET_LAUNCH = "2023-08-09T00:00:00Z";
 const HOLIDAYS_MM_DD = new Set<string>(["03-30", "01-01", "12-25"]);
 
 // ====== Viem client (مع fallback) ======
-const RPC_FALLBACK = base.rpcUrls.public.http[0];
+const RPC_FALLBACK =
+  ((base as any).rpcUrls?.public?.http?.[0] as string) ??
+  ((base as any).rpcUrls?.default?.http?.[0] as string) ??
+  "https://mainnet.base.org";
+
 const client = createPublicClient({
   chain: base,
   transport: http(ALCHEMY_BASE_RPC || RPC_FALLBACK),
 });
+
 
 // ====== أدوات مساعدة عامة ======
 function isHttpUrl(raw?: string) {
