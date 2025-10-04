@@ -1,7 +1,7 @@
 ﻿// app/api/summary/route.ts
 import { NextRequest } from "next/server";
 
-// تشغيل الفنكشن
+// إعدادات تشغيل الفنكشن
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -14,15 +14,17 @@ import { getBasenameFor } from "@/app/lib/basename";
 import { PROTOCOL_ADDRS, PROTOCOL_KEYWORDS } from "@/config/protocols";
 
 // ====== مفاتيح/بيئات ======
-const BASESCAN_API_KEY = process.env.BASESCAN_API_KEY || "";
+const ETHERSCAN_API_KEY =
+  process.env.ETHERSCAN_API_KEY || process.env.BASESCAN_API_KEY || ""; // fallback لو قديم
 const ALCHEMY_BASE_RPC = process.env.ALCHEMY_BASE_RPC || "";
 const COINGECKO_RAW = process.env.COINGECKO_API;
 
-// ====== ثوابت ======
+// ====== ثوابت عامة ======
+const CHAIN_ID_BASE = 8453;
 const BASE_MAINNET_LAUNCH = "2023-08-09T00:00:00Z";
 const HOLIDAYS_MM_DD = new Set<string>(["03-30", "01-01", "12-25"]);
 
-// ====== Viem client مع fallback متوافق مع viem ======
+// ====== Viem client (مع fallback) ======
 const RPC_FALLBACK =
   ((base as any).rpcUrls?.public?.http?.[0] as string) ??
   ((base as any).rpcUrls?.default?.http?.[0] as string) ??
@@ -33,7 +35,7 @@ const client = createPublicClient({
   transport: http(ALCHEMY_BASE_RPC || RPC_FALLBACK),
 });
 
-// ====== Utilities عامة ======
+// ====== أدوات عامة ======
 function isHttpUrl(raw?: string) {
   try {
     if (!raw) return false;
@@ -48,54 +50,33 @@ async function fetchWithTimeout(url: string, init: RequestInit = {}, ms = 9000) 
   const ctrl = new AbortController();
   const id = setTimeout(() => ctrl.abort(), ms);
   try {
-    return await fetch(url, {
-      ...init,
-      signal: ctrl.signal,
-      cache: "no-store",
-      headers: {
-        ...(init.headers || {}),
-        "cache-control": "no-store",
-      },
-    });
+    const r = await fetch(url, { ...init, signal: ctrl.signal, cache: "no-store" });
+    return r;
   } finally {
     clearTimeout(id);
   }
 }
 
-// ====== BaseScan ======
-const BASESCAN_API = "https://api.basescan.org/api";
-function bsUrl(p: Record<string, string>) {
-  const u = new URL(BASESCAN_API);
+// ====== Etherscan V2 (بديل BaseScan V1) ======
+const ETHERSCAN_V2 = "https://api.etherscan.io/v2/api";
+
+function v2url(p: Record<string, string>) {
+  const u = new URL(ETHERSCAN_V2);
+  u.searchParams.set("chainid", String(CHAIN_ID_BASE));
   for (const k in p) u.searchParams.set(k, p[k]);
-  if (BASESCAN_API_KEY) u.searchParams.set("apikey", BASESCAN_API_KEY);
+  if (ETHERSCAN_API_KEY) u.searchParams.set("apikey", ETHERSCAN_API_KEY);
   return u.toString();
 }
 
-/** نتيجة موحّدة من BaseScan */
-type BSResponse<T = any> = {
-  ok: boolean;
-  status?: string;
-  message?: string;
-  result: T | null;
-  raw?: any;
-};
-
-async function basescan(p: Record<string, string>): Promise<BSResponse> {
-  const url = bsUrl(p);
-  try {
-    const r = await fetchWithTimeout(url);
-    const j = await r.json().catch(() => null);
-    const status = j?.status ?? (r.ok ? "1" : "0");
-    const message = j?.message ?? r.statusText;
-    const result = j?.result ?? null;
-    return { ok: status === "1" && !!result, status, message, result, raw: j };
-  } catch (e: any) {
-    return { ok: false, status: "0", message: e?.message || "fetch error", result: null };
-  }
+/** تُعيد result كما هو. غالبًا Array في txs و string/object في balance */
+async function etherscanV2(p: Record<string, string>): Promise<any> {
+  const r = await fetchWithTimeout(v2url(p));
+  const j = await r.json().catch(() => null);
+  // بنبقي على كامل الاستجابة للـ debug
+  return j || { status: "0", message: "parse_error", result: null };
 }
 
-/** تطبيع إلى Array دائمًا */
-const asArray = <T,>(x: any): T[] => (Array.isArray(x) ? (x as T[]) : []);
+const ensureArray = <T,>(x: any): T[] => (Array.isArray(x) ? (x as T[]) : []);
 
 // ====== CoinGecko ======
 const DEFAULT_CG_URL = "https://api.coingecko.com/api/v3/simple/price";
@@ -117,13 +98,14 @@ async function prices() {
     const r = await fetchWithTimeout(u.toString(), { headers });
     if (!r.ok) return { eth: 0, usdc: 1 };
     const j = await r.json().catch(() => null);
+    if (!j) return { eth: 0, usdc: 1 };
     return { eth: j?.ethereum?.usd ?? 0, usdc: j?.["usd-coin"]?.usd ?? 1 };
   } catch {
     return { eth: 0, usdc: 1 };
   }
 }
 
-// ====== ENS/name → 0x ======
+// ====== تحويل الاسم/العنوان إلى 0x ======
 async function resolveAddressOrName(input: string): Promise<`0x${string}` | null> {
   if (!input) return null;
   const s = input.trim();
@@ -140,7 +122,7 @@ async function resolveAddressOrName(input: string): Promise<`0x${string}` | null
   return null;
 }
 
-// ====== Helpers ======
+// ====== Utilities ======
 const isoDay = (t: number) => new Date(t * 1000).toISOString().slice(0, 10);
 function isoWeek(ts: number) {
   const d = new Date(Date.UTC(new Date(ts * 1000).getUTCFullYear(), new Date(ts * 1000).getUTCMonth(), new Date(ts * 1000).getUTCDate()));
@@ -159,10 +141,10 @@ async function isContract(addr: string) {
 // ====== Route ======
 export async function GET(req: NextRequest) {
   try {
-    const dbg = req.nextUrl.searchParams.get("debug");
-    if (dbg === "ping") {
+    // Debug ping للتشخيص السريع
+    if (req.nextUrl.searchParams.get("debug") === "ping") {
       return new Response(JSON.stringify({ ok: true, note: "alive" }), {
-        headers: { "content-type": "application/json", "cache-control": "no-store" },
+        headers: { "content-type": "application/json" },
       });
     }
 
@@ -173,46 +155,47 @@ export async function GET(req: NextRequest) {
     }
 
     // Basename
-    const baseEns =
-      raw.includes(".") && raw.toLowerCase().endsWith(".base.eth")
-        ? raw.toLowerCase()
-        : await getBasenameFor(address);
+    let baseEns: string | null = null;
+    if (raw.includes(".") && raw.toLowerCase().endsWith(".base.eth")) {
+      baseEns = raw.toLowerCase();
+    } else {
+      baseEns = await getBasenameFor(address);
+    }
 
-    // ---- استعلامات BaseScan (مع تشخيص) ----
-    const [normalR, erc20R, erc721R, balanceR] = await Promise.all([
-      basescan({ module: "account", action: "txlist", address, startblock: "0", endblock: "99999999", page: "1", offset: "5000", sort: "asc" }),
-      basescan({ module: "account", action: "tokentx", address, startblock: "0", endblock: "99999999", page: "1", offset: "5000", sort: "asc" }),
-      basescan({ module: "account", action: "tokennfttx", address, startblock: "0", endblock: "99999999", page: "1", offset: "5000", sort: "asc" }),
-      basescan({ module: "account", action: "balance", address, tag: "latest" }),
+    // --- جلب المعاملات (Etherscan V2) ---
+    const [normalRes, erc20Res, erc721Res] = await Promise.all([
+      etherscanV2({ module: "account", action: "txlist", address, startblock: "0", endblock: "99999999", page: "1", offset: "5000", sort: "asc" }),
+      etherscanV2({ module: "account", action: "tokentx", address, startblock: "0", endblock: "99999999", page: "1", offset: "5000", sort: "asc" }),
+      etherscanV2({ module: "account", action: "tokennfttx", address, startblock: "0", endblock: "99999999", page: "1", offset: "5000", sort: "asc" }),
     ]);
 
-    // في وضع debug=raw ارجع الـ raw مباشرة
-    if (dbg === "raw") {
+    // debug: ?debug=raw
+    if (req.nextUrl.searchParams.get("debug") === "raw") {
       return new Response(
         JSON.stringify(
           {
             q: address,
-            normal: { status: normalR.status, message: normalR.message, len: asArray(normalR.result).length, sample: asArray(normalR.result)[0] },
-            erc20: { status: erc20R.status, message: erc20R.message, len: asArray(erc20R.result).length, sample: asArray(erc20R.result)[0] },
-            erc721: { status: erc721R.status, message: erc721R.message, len: asArray(erc721R.result).length, sample: asArray(erc721R.result)[0] },
-            balance: { status: balanceR.status, message: balanceR.message, result: balanceR.result },
+            normal: { status: normalRes?.status, message: normalRes?.message, len: ensureArray(normalRes?.result).length },
+            erc20: { status: erc20Res?.status, message: erc20Res?.message, len: ensureArray(erc20Res?.result).length },
+            erc721: { status: erc721Res?.status, message: erc721Res?.message, len: ensureArray(erc721Res?.result).length },
           },
           null,
           2
         ),
-        { headers: { "content-type": "application/json", "cache-control": "no-store" } }
+        { headers: { "content-type": "application/json" } }
       );
     }
 
-    const normal = asArray<any>(normalR.result);
-    const erc20 = asArray<any>(erc20R.result);
-    const erc721 = asArray<any>(erc721R.result);
+    const normal = ensureArray<any>(normalRes?.result);
+    const erc20 = ensureArray<any>(erc20Res?.result);
+    const erc721 = ensureArray<any>(erc721Res?.result);
 
-    const ok = normal.filter((t) => String(t.isError) === "0");
+    const ok = normal.filter((t: any) => String(t.isError) === "0");
     const now = Math.floor(Date.now() / 1000);
     const firstTxAt = ok[0] ? Number(ok[0].timeStamp) : null;
     const walletAgeDays = firstTxAt ? Math.floor((now - firstTxAt) / 86400) : 0;
 
+    // unique day/week/month
     const days = new Set<string>(), weeks = new Set<string>(), months = new Set<string>();
     for (const t of ok) {
       const ts = Number(t.timeStamp);
@@ -233,7 +216,7 @@ export async function GET(req: NextRequest) {
     const uniqueContractInteractions = cset.size;
     const totalContractInteractions = ok.filter((t: any) => t.to && cset.has(String(t.to).toLowerCase())).length;
 
-    // Bridge
+    // Bridge deposits + عدّادات الطرف الثالث
     let depositedEth = 0;
     let nativeBridgeUsed = false;
     let usedThirdPartyBridge = false;
@@ -249,6 +232,7 @@ export async function GET(req: NextRequest) {
       const from = String(t.from || "").toLowerCase();
       const to = String(t.to || "").toLowerCase();
       const val = Number(t.value) / 1e18;
+
       if (to === address) {
         if (NATIVE_BRIDGE_SENDERS_L2.includes(from)) {
           depositedEth += val;
@@ -267,7 +251,7 @@ export async function GET(req: NextRequest) {
     // أسعار
     const px = await prices();
 
-    // حجم ETH
+    // حجم ETH التقريبي
     const volumeEth = ok.reduce((s: number, t: any) => s + Number(t.value) / 1e18, 0);
     const volumeEthUSD = volumeEth * (px.eth || 0);
 
@@ -282,12 +266,12 @@ export async function GET(req: NextRequest) {
     }
     const volumeUsdTotal = volumeEthUSD + usdcAmount * (px.usdc || 1);
 
-    // الرصيد (string | object | array)
+    // الرصيد (Etherscan V2)
+    const balRes = await etherscanV2({ module: "account", action: "balance", address, tag: "latest" });
     let wei = "0";
-    const balRes = balanceR.result;
-    if (Array.isArray(balRes)) wei = balRes?.[0]?.balance || "0";
-    else if (balRes && typeof balRes === "object") wei = (balRes as any)?.balance || "0";
-    else if (typeof balRes === "string") wei = balRes;
+    // V2 قد يرجّع { result: { balance: "..." } } أو { result: "..." }
+    if (typeof balRes?.result === "string") wei = balRes.result;
+    else if (balRes?.result?.balance) wei = balRes.result.balance;
     const balanceEth = Number(wei) / 1e18;
 
     // ========= Prescription Usage =========
@@ -374,11 +358,11 @@ export async function GET(req: NextRequest) {
       if (candidate > maxSwapUsd) maxSwapUsd = candidate;
     }
 
-    // تنويع / صور
+    // ========= Variety / Imaging =========
     const erc20Count = new Set(erc20.map((t: any) => String(t.contractAddress || "").toLowerCase())).size;
     const nftCount = new Set(erc721.map((t: any) => String(t.contractAddress || "").toLowerCase())).size;
 
-    // جرعة/تكاليف
+    // ========= Dosage / Costs =========
     const totalVolumeEth = volumeEth;
     const gasEth = ok.reduce((s: number, t: any) => {
       const gu = Number(t.gasUsed || t.gas || 0);
@@ -386,16 +370,20 @@ export async function GET(req: NextRequest) {
       return s + (gu * gp) / 1e18;
     }, 0);
 
-    // عقود منشورة
+    // ========= Deployed contracts =========
     const deployedContracts = ok.filter((t: any) => {
       const to = String(t.to || "").toLowerCase();
       const created = String((t as any).contractAddress || "");
       return (to === "" || to === "0x0000000000000000000000000000000000000000") && created && String(t.isError) === "0";
     }).length;
 
-    // Special clinics
+    // ========= Special Clinics =========
     const allTxsForProto = [
-      ...ok.map((t: any) => ({ to: String(t.to || "").toLowerCase(), from: String(t.from || "").toLowerCase(), fn: String(t.functionName || "").toLowerCase() })),
+      ...ok.map((t: any) => ({
+        to: String(t.to || "").toLowerCase(),
+        from: String(t.from || "").toLowerCase(),
+        fn: String(t.functionName || "").toLowerCase(),
+      })),
       ...erc20.map((t: any) => ({ to: String(t.to || "").toLowerCase(), from: String(t.from || "").toLowerCase(), fn: "" })),
       ...erc721.map((t: any) => ({ to: String(t.to || "").toLowerCase(), from: String(t.from || "").toLowerCase(), fn: "" })),
     ];
@@ -421,7 +409,8 @@ export async function GET(req: NextRequest) {
     const matcha = countProto("matcha");
 
     const lendingAny =
-      aave > 0 || allTxsForProto.some((t) => t.fn.includes("borrow") || t.fn.includes("repay") || t.fn.includes("liquidate"));
+      aave > 0 ||
+      allTxsForProto.some((t) => t.fn.includes("borrow") || t.fn.includes("repay") || t.fn.includes("liquidate"));
 
     const thresholds = {
       deposited_gt_10k: depositedEth * (px.eth || 0) >= 10000,
@@ -439,87 +428,80 @@ export async function GET(req: NextRequest) {
       contracts_ge_100: totalContractInteractions >= 100,
     };
 
+    // ====== Onchain Lifestyle fields ======
+    const allTxTimestampsUTC = Array.from(
+      new Set<string>([
+        ...ok.map((t: any) => new Date(Number(t.timeStamp) * 1000).toISOString()),
+        ...erc20.map((t: any) => new Date(Number(t.timeStamp) * 1000).toISOString()),
+        ...erc721.map((t: any) => new Date(Number(t.timeStamp) * 1000).toISOString()),
+      ])
+    ).sort();
+
+    const holidayDatesUTC = Array.from(
+      new Set(allTxTimestampsUTC.map((iso) => iso.slice(0, 10)).filter((ymd) => HOLIDAYS_MM_DD.has(ymd.slice(5))))
+    );
+
     // ====== Response ======
     return new Response(
-      JSON.stringify(
-        {
-          address,
-          baseEns,
-          balanceEth,
-          volume: { eth: volumeEth, ethUsd: volumeEthUSD, usdTotal: volumeUsdTotal, usdcAmount },
-          nativeTxs,
-          tokenTxs,
-          walletAgeDays,
-          uniqueDays,
-          uniqueWeeks,
-          uniqueMonths,
-          contracts: { totalInteractions: totalContractInteractions, uniqueInteractions: uniqueContractInteractions },
-          bridge: { depositedEth, depositedUsd: depositedEth * (px.eth || 0), nativeBridgeUsed },
-          thresholds,
+      JSON.stringify({
+        address,
+        baseEns,
+        balanceEth,
+        volume: { eth: volumeEth, ethUsd: volumeEthUSD, usdTotal: volumeUsdTotal, usdcAmount },
+        nativeTxs,
+        tokenTxs,
+        walletAgeDays,
+        uniqueDays,
+        uniqueWeeks,
+        uniqueMonths,
+        contracts: { totalInteractions: totalContractInteractions, uniqueInteractions: uniqueContractInteractions },
+        bridge: { depositedEth, depositedUsd: depositedEth * (px.eth || 0), nativeBridgeUsed },
+        thresholds,
 
-          // Lifestyle
-          allTxTimestampsUTC: Array.from(new Set([
-            ...ok.map((t: any) => new Date(Number(t.timeStamp) * 1000).toISOString()),
-            ...erc20.map((t: any) => new Date(Number(t.timeStamp) * 1000).toISOString()),
-            ...erc721.map((t: any) => new Date(Number(t.timeStamp) * 1000).toISOString()),
-          ])).sort(),
-          mainnetLaunchUTC: BASE_MAINNET_LAUNCH,
-          holidayDatesUTC: Array.from(new Set(
-            [...ok, ...erc20, ...erc721]
-              .map((t: any) => new Date(Number(t.timeStamp) * 1000).toISOString().slice(0, 10))
-              .filter((ymd: string) => HOLIDAYS_MM_DD.has(ymd.slice(5)))
-          )),
+        // Lifestyle
+        allTxTimestampsUTC,
+        mainnetLaunchUTC: BASE_MAINNET_LAUNCH,
+        holidayDatesUTC,
 
-          // Usage
-          swaps,
-          stablecoinTxs,
-          usdcTrades,
-          stablecoinTypes,
-          maxSwapUsd,
+        // Prescription Usage
+        swaps,
+        stablecoinTxs,
+        usdcTrades,
+        stablecoinTypes,
+        maxSwapUsd,
 
-          // Variety / Imaging
-          erc20Count,
-          nftCount,
+        // Medication Variety / Imaging Records
+        erc20Count,
+        nftCount,
 
-          // Dosage / Costs
-          totalVolumeEth,
-          gasEth,
+        // Onchain Dosage / Treatment Costs
+        totalVolumeEth,
+        gasEth,
 
-          // Referrals
-          usedNativeBridge: nativeBridgeUsed,
-          usedThirdPartyBridge,
-          relayCount: bridgeCounts["relay"] || 0,
-          jumperCount: bridgeCounts["jumper"] || 0,
-          bungeeCount: bridgeCounts["bungee"] || 0,
-          acrossCount: bridgeCounts["across"] || 0,
+        // Referrals
+        usedNativeBridge: nativeBridgeUsed,
+        usedThirdPartyBridge,
+        relayCount: bridgeCounts["relay"] || 0,
+        jumperCount: bridgeCounts["jumper"] || 0,
+        bungeeCount: bridgeCounts["bungee"] || 0,
+        acrossCount: bridgeCounts["across"] || 0,
 
-          // Medical Staff
-          deployedContracts,
+        // Medical Staff
+        deployedContracts,
 
-          // Special Clinics
-          uniswap,
-          sushi,
-          pancake,
-          aerodrome,
-          aave,
-          limitless,
-          stargate,
-          metamask,
-          matcha,
-          lendingAny,
-
-          // DEBUG مفيد: يشوف حالة BaseScan
-          apiDebug: {
-            normal: { status: normalR.status, message: normalR.message, len: normal.length },
-            erc20: { status: erc20R.status, message: erc20R.message, len: erc20.length },
-            erc721: { status: erc721R.status, message: erc721R.message, len: erc721.length },
-            balance: { status: balanceR.status, message: balanceR.message, raw: balanceR.result },
-          },
-        },
-        null,
-        0
-      ),
-      { headers: { "content-type": "application/json", "cache-control": "no-store" } }
+        // Special Clinics
+        uniswap,
+        sushi,
+        pancake,
+        aerodrome,
+        aave,
+        limitless,
+        stargate,
+        metamask,
+        matcha,
+        lendingAny,
+      }),
+      { headers: { "content-type": "application/json" } }
     );
   } catch (e: any) {
     console.error("summary.error", e);
