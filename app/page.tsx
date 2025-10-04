@@ -78,42 +78,41 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
 
   const run = async (addr: string) => {
-  setError(null);
-  setData(null);
-  if (!addr) { setError("please enter your wallet"); return; }
+    setError(null);
+    setData(null);
+    if (!addr) { setError("please enter your wallet"); return; }
 
-  try {
-    setLoading(true);
+    try {
+      setLoading(true);
 
-    // base URL موثوق
-    const base =
-      (process.env.NEXT_PUBLIC_SITE_URL && process.env.NEXT_PUBLIC_SITE_URL.trim()) ||
-      (typeof window !== "undefined" ? window.location.origin : "");
+      // ✅ مسار مطلق مضمون إلى /api/summary
+      const apiUrl = new URL("/api/summary", window.location.origin);
+      apiUrl.searchParams.set("address", addr.trim());
 
-    const url = `${base}/api/summary?address=${encodeURIComponent(addr.trim())}`;
+      const r = await fetch(apiUrl.toString(), { cache: "no-store" });
 
-    const r = await fetch(url, { cache: "no-store" });
+      // تشخيص مفيد (مؤقتًا)
+      const rawText = await r.clone().text();
+      // eslint-disable-next-line no-console
+      console.log("GET", apiUrl.toString(), "→", r.status, r.statusText);
+      // eslint-disable-next-line no-console
+      console.log("BODY:", rawText);
 
-    const rawText = await r.clone().text();
-    console.log("GET", url, "→", r.status, r.statusText);
-    console.log("BODY:", rawText);
+      let j: any = null;
+      try { j = JSON.parse(rawText); } catch { /* قد لا يكون JSON */ }
 
-    let j: any = null;
-    try { j = JSON.parse(rawText); } catch {}
-
-    if (!r.ok || !isSummary(j)) {
-      const serverMsg = (j && j.error) ? j.error : rawText || r.statusText || "Unexpected API response";
-      setError(serverMsg);
-      return;
+      if (!r.ok || !isSummary(j)) {
+        const serverMsg = (j && j.error) ? j.error : rawText || r.statusText || "Unexpected API response";
+        setError(serverMsg);
+        return;
+      }
+      setData(j);
+    } catch (e: any) {
+      setError(e?.message || "Network error");
+    } finally {
+      setLoading(false);
     }
-    setData(j);
-  } catch (e: any) {
-    setError(e?.message || "Network error");
-  } finally {
-    setLoading(false);
-  }
-};
-
+  };
 
   const s: Summary | null = data && isSummary(data) ? data : null;
 
@@ -230,7 +229,6 @@ export default function Home() {
             strongest={health.strongest}
             weakest={health.weakest}
             onMint={async () => {
-              // TODO: اربط عقد الـ Mint هنا لاحقاً
               await new Promise((res) => setTimeout(res, 600));
             }}
           />
