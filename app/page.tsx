@@ -161,26 +161,31 @@ export default function Home() {
   });
 
   // توحيد شكل البيانات للرادار ليطابق ما يتوقعه ProgressRadar
-  type RadarAreas = {
-    history: number;
-    activity: number;
-    variety: number;   // diversity → variety
-    usage: number;
-    costs: number;
-    deployment: number;
-  };
+type RadarAreas = {
+  history: number;
+  activity: number;
+  variety: number;   // diversity → variety
+  usage: number;
+  costs: number;
+  deployment: number;
+  clinics: number;     // إضافي
+  lifestyle: number;   // إضافي
+};
 
-  const radarAreas: RadarAreas = {
-    history: (health as any)?.areas?.history ?? 0,
-    activity: (health as any)?.areas?.activity ?? 0,
-    variety:
-      (health as any)?.areas?.variety ??
-      (health as any)?.areas?.diversity ??
-      0,
-    usage: (health as any)?.areas?.usage ?? 0,
-    costs: (health as any)?.areas?.costs ?? 0,
-    deployment: (health as any)?.areas?.deployment ?? 0,
-  };
+const radarAreas: RadarAreas = {
+  history:     (health as any)?.areas?.history ?? 0,
+  activity:    (health as any)?.areas?.activity ?? 0,
+  variety:
+    (health as any)?.areas?.variety ??
+    (health as any)?.areas?.diversity ??
+    0,
+  usage:       (health as any)?.areas?.usage ?? 0,
+  costs:       (health as any)?.areas?.costs ?? 0,
+  deployment:  (health as any)?.areas?.deployment ?? 0,
+  clinics:     (health as any)?.areas?.clinics ?? 0,     // ← جديد
+  lifestyle:   (health as any)?.areas?.lifestyle ?? 0,   // ← جديد
+};
+
 
   return (
     <main className={`${brand.bg} ${brand.text} min-h-screen p-6`}>
