@@ -2,7 +2,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
 import { brand } from "@/config/brand";
 import Header from "./components/Header";
 import WalletBar from "./components/WalletBar";
@@ -31,22 +30,28 @@ type Summary = {
   allTxTimestampsUTC?: string[];
   mainnetLaunchUTC?: string;
   holidayDatesUTC?: string[];
+
   swaps?: number;
   stablecoinTxs?: number;
   usdcTrades?: number;
   stablecoinTypes?: number;
   maxSwapUsd?: number;
+
   erc20Count?: number;
   nftCount?: number;
+
   totalVolumeEth?: number;
   gasEth?: number;
+
   usedThirdPartyBridge?: boolean;
   usedNativeBridge?: boolean;
   relayCount?: number;
   jumperCount?: number;
   bungeeCount?: number;
   acrossCount?: number;
+
   deployedContracts?: number;
+
   // special clinics
   uniswap?: number;
   sushi?: number;
@@ -65,29 +70,32 @@ function isSummary(x: any): x is Summary {
 }
 
 export default function Home() {
-  const router = useRouter();
-  const qs = useSearchParams();
-
   const [data, setData] = useState<Summary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   // لإلغاء أي طلب سابق وتجنّب السباقات
   const ctrlRef = useRef<AbortController | null>(null);
-  // آخر عنوان تم الاستعلام عنه لتجنب التكرار
   const lastAddrRef = useRef<string>("");
 
-  // قراءة ?address من الـ URL وتشغيل تلقائي
-  const initialAddress = useMemo(() => (qs?.get("address") || "").trim(), [qs]);
+  // اقرأ ?address من الرابط بعد mount (بدون useSearchParams)
+  const [initial, setInitial] = useState<string>("");
   useEffect(() => {
-    if (initialAddress) {
-      // شغّل مرة واحدة فقط إذا كان مختلف عن آخر طلب
-      if (initialAddress.toLowerCase() !== lastAddrRef.current.toLowerCase()) {
-        run(initialAddress);
-      }
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const a = (sp.get("address") || "").trim();
+      if (a) setInitial(a);
+    } catch {}
+    // لا dependencies
+  }, []);
+
+  // شغّل تلقائيًا إذا فيه عنوان بالرابط
+  useEffect(() => {
+    if (initial && initial.toLowerCase() !== lastAddrRef.current.toLowerCase()) {
+      run(initial);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialAddress]);
+  }, [initial]);
 
   const run = async (addr: string) => {
     const clean = (addr || "").trim();
@@ -97,9 +105,8 @@ export default function Home() {
       setError("please enter your wallet");
       return;
     }
-    // تجاهُل إن كان نفس آخر عنوان
     if (clean.toLowerCase() === lastAddrRef.current.toLowerCase() && data) {
-      return;
+      return; // نفس العنوان ونفس البيانات موجودة
     }
     lastAddrRef.current = clean;
 
@@ -108,18 +115,19 @@ export default function Home() {
     const ctrl = new AbortController();
     ctrlRef.current = ctrl;
 
-    // حدّث الـ URL (بدون إعادة تحميل الصفحة)
-    const url = new URL(window.location.href);
-    url.searchParams.set("address", clean);
-    router.replace(url.pathname + "?" + url.searchParams.toString());
+    // حدّث الـ URL بدون إعادة تحميل الصفحة
+    try {
+      const u = new URL(window.location.href);
+      u.searchParams.set("address", clean);
+      window.history.replaceState(null, "", u.pathname + "?" + u.searchParams.toString());
+    } catch {}
 
-    // مهلة للطلب (15s)
+    // مهلة (15s)
     const timeout = setTimeout(() => ctrl.abort(), 15000);
 
     try {
       setLoading(true);
 
-      // ✅ مسار مطلق مضمون
       const apiUrl = new URL("/api/summary", window.location.origin);
       apiUrl.searchParams.set("address", clean);
 
@@ -128,12 +136,10 @@ export default function Home() {
         signal: ctrl.signal,
       });
 
-      // جرّب JSON مباشرة
       let j: any = null;
       try {
         j = await r.clone().json();
       } catch {
-        // fallback: نص (لأخطاء plain)
         const raw = await r.text();
         if (!r.ok) {
           setError(raw || r.statusText || "Unexpected API response");
@@ -148,9 +154,7 @@ export default function Home() {
 
       setData(j);
     } catch (e: any) {
-      if (e?.name !== "AbortError") {
-        setError(e?.message || "Network error");
-      }
+      if (e?.name !== "AbortError") setError(e?.message || "Network error");
     } finally {
       clearTimeout(timeout);
       setLoading(false);
@@ -179,7 +183,7 @@ export default function Home() {
 
   const txCount = (s?.nativeTxs ?? 0) + (s?.tokenTxs ?? 0);
 
-  // حساب الصحة الشاملة (آمن مع القيم الافتراضية)
+  // حساب الصحة الشاملة
   const health = computeHealth({
     walletAgeDays: s?.walletAgeDays ?? 0,
     nativeTxs: s?.nativeTxs ?? 0,
@@ -215,7 +219,7 @@ export default function Home() {
     matcha: s?.matcha ?? 0,
     lendingAny: s?.lendingAny ?? false,
 
-    // لحالات نقص الـ timestamps: بنستخدم uniqueDays كبديل
+    // لحالات نقص الـ timestamps
     allTxTimestampsUTC: s?.allTxTimestampsUTC ?? [],
     fallbackActiveDays: s?.uniqueDays ?? 0,
   });
@@ -254,12 +258,10 @@ export default function Home() {
           </div>
         )}
 
-        {/* كرت Main Report */}
         <div className="mb-6">
           <MainReportTable rows={rows} />
         </div>
 
-        {/* تشخيص نهائي + ملخص الطبيب */}
         <div className="grid md:grid-cols-2 gap-4 mb-6">
           <FinalDiagnosisCard
             score={health.score}
@@ -279,7 +281,10 @@ export default function Home() {
           />
         </div>
 
-        {/* شبكة البادجات */}
+        {/* لو حبيت تفعل الرادار لاحقًا:
+        <ProgressRadar areas={radarAreas} />
+        */}
+
         <BadgesGrid
           walletAge={s?.walletAgeDays ?? 0}
           txCount={txCount}
