@@ -42,7 +42,7 @@ type Summary = {
   erc20Count?: number;
   nftCount?: number;
 
-  totalVolumeEth?: number; // قد تكون موجودة، بس مش ضرورية للتقييم بعد التحديث
+  totalVolumeEth?: number;
   gasEth?: number;
 
   usedThirdPartyBridge?: boolean;
@@ -54,6 +54,7 @@ type Summary = {
 
   deployedContracts?: number;
 
+  // special clinics (قد تأتي من الـ API)
   uniswap?: number;
   sushi?: number;
   pancake?: number;
@@ -145,7 +146,7 @@ export default function Home() {
     // deployment
     deployedContracts: s?.deployedContracts ?? 0,
 
-    // special clinics bonus الخفيف
+    // special clinics bonus
     uniswap: s?.uniswap ?? 0,
     aerodrome: s?.aerodrome ?? 0,
     aave: s?.aave ?? 0,
@@ -158,6 +159,28 @@ export default function Home() {
     allTxTimestampsUTC: s?.allTxTimestampsUTC ?? [],
     fallbackActiveDays: s?.uniqueDays ?? 0,
   });
+
+  // توحيد شكل البيانات للرادار ليطابق ما يتوقعه ProgressRadar
+  type RadarAreas = {
+    history: number;
+    activity: number;
+    variety: number;   // diversity → variety
+    usage: number;
+    costs: number;
+    deployment: number;
+  };
+
+  const radarAreas: RadarAreas = {
+    history: (health as any)?.areas?.history ?? 0,
+    activity: (health as any)?.areas?.activity ?? 0,
+    variety:
+      (health as any)?.areas?.variety ??
+      (health as any)?.areas?.diversity ??
+      0,
+    usage: (health as any)?.areas?.usage ?? 0,
+    costs: (health as any)?.areas?.costs ?? 0,
+    deployment: (health as any)?.areas?.deployment ?? 0,
+  };
 
   return (
     <main className={`${brand.bg} ${brand.text} min-h-screen p-6`}>
@@ -199,42 +222,42 @@ export default function Home() {
 
         {/* رادار التقدّم */}
         <div className="mb-8">
-          <ProgressRadar areas={health.areas} />
+          <ProgressRadar areas={radarAreas} />
         </div>
 
         {/* شبكة البادجات */}
         <BadgesGrid
-  walletAge={s?.walletAgeDays ?? 0}
-  txCount={txCount}
-  activeDays={s?.uniqueDays ?? 0}
-  txTimestampsUTC={s?.allTxTimestampsUTC ?? []}
-  mainnetLaunchUTC={s?.mainnetLaunchUTC ?? "2023-08-09T00:00:00Z"}
-  holidayDatesUTC={s?.holidayDatesUTC ?? []}
-  uniqueContracts={s?.contracts?.uniqueInteractions ?? 0}
-  totalVolumeEth={s?.volume.eth ?? 0}
-  gasEth={s?.gasEth ?? 0}
-  swaps={s?.swaps ?? 0}
-  stablecoinTxs={s?.stablecoinTxs ?? 0}
-  usdcTrades={s?.usdcTrades ?? 0}
-  stablecoinTypes={s?.stablecoinTypes ?? 0}
-  maxSwapUsd={s?.maxSwapUsd ?? 0}
-  erc20Count={s?.erc20Count ?? 0}
-  nftCount={s?.nftCount ?? 0}
-  usedThirdPartyBridge={s?.usedThirdPartyBridge ?? false}
-  usedNativeBridge={s?.usedNativeBridge ?? false}
-  relayCount={s?.relayCount ?? 0}
-  jumperCount={s?.jumperCount ?? 0}
-  bungeeCount={s?.bungeeCount ?? 0}
-  acrossCount={s?.acrossCount ?? 0}
-  deployedContracts={s?.deployedContracts ?? 0}
-  uniswap={s?.uniswap ?? 0}
-  aerodrome={s?.aerodrome ?? 0}
-  aave={s?.aave ?? 0}
-  stargate={s?.stargate ?? 0}
-  metamask={s?.metamask ?? 0}
-  lendingAny={s?.lendingAny ?? false}
-  matcha={s?.matcha ?? 0}
-/>
+          walletAge={s?.walletAgeDays ?? 0}
+          txCount={txCount}
+          activeDays={s?.uniqueDays ?? 0}
+          txTimestampsUTC={s?.allTxTimestampsUTC ?? []}
+          mainnetLaunchUTC={s?.mainnetLaunchUTC ?? "2023-08-09T00:00:00Z"}
+          holidayDatesUTC={s?.holidayDatesUTC ?? []}
+          uniqueContracts={s?.contracts?.uniqueInteractions ?? 0}
+          totalVolumeEth={s?.volume.eth ?? 0}
+          gasEth={s?.gasEth ?? 0}
+          swaps={s?.swaps ?? 0}
+          stablecoinTxs={s?.stablecoinTxs ?? 0}
+          usdcTrades={s?.usdcTrades ?? 0}
+          stablecoinTypes={s?.stablecoinTypes ?? 0}
+          maxSwapUsd={s?.maxSwapUsd ?? 0}
+          erc20Count={s?.erc20Count ?? 0}
+          nftCount={s?.nftCount ?? 0}
+          usedThirdPartyBridge={s?.usedThirdPartyBridge ?? false}
+          usedNativeBridge={s?.usedNativeBridge ?? false}
+          relayCount={s?.relayCount ?? 0}
+          jumperCount={s?.jumperCount ?? 0}
+          bungeeCount={s?.bungeeCount ?? 0}
+          acrossCount={s?.acrossCount ?? 0}
+          deployedContracts={s?.deployedContracts ?? 0}
+          uniswap={s?.uniswap ?? 0}
+          aerodrome={s?.aerodrome ?? 0}
+          aave={s?.aave ?? 0}
+          stargate={s?.stargate ?? 0}
+          metamask={s?.metamask ?? 0}
+          lendingAny={s?.lendingAny ?? false}
+          matcha={s?.matcha ?? 0}
+        />
       </div>
     </main>
   );
