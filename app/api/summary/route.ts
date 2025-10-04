@@ -65,27 +65,25 @@ function bsUrl(p: Record<string, string>) {
   return u.toString();
 }
 
-/**
- * تُعيد إمّا Array (عندما تكون نتيجة لستات معاملات) أو قيمة/كائن كما هو (مثل balance)
- */
-async function basescan(p: Record<string, string>): Promise<any> {
+// نرجّع الـ raw كله (status/message/result) بدل result فقط
+async function basescan(p: Record<string, string>) {
   const r = await fetchWithTimeout(bsUrl(p));
   const j = await r.json().catch(() => null);
-  const res = j?.result;
-  if (Array.isArray(res)) return res;
-  if (res && Array.isArray(res.transactions)) return res.transactions;
-  if (res && Array.isArray(res.transfers)) return res.transfers;
-  return res; // قد يكون string (balance) أو object
+  return j as { status?: string; message?: string; result?: any } | null;
 }
 
-/** تطبيع القيم إلى Array دايمًا */
-const ensureArray = <T,>(x: any): T[] => (Array.isArray(x) ? (x as T[]) : []);
+// تطبيع أي قيمة إلى Array
+function asArr<T = any>(x: any): T[] {
+  return Array.isArray(x) ? (x as T[]) : [];
+}
 
 // ====== CoinGecko ======
 const DEFAULT_CG_URL = "https://api.coingecko.com/api/v3/simple/price";
 async function prices() {
   const baseUrl = isHttpUrl(COINGECKO_RAW as string) ? (COINGECKO_RAW as string) : DEFAULT_CG_URL;
-  const key = isHttpUrl(COINGECKO_RAW as string) ? (process.env.COINGECKO_API_KEY || "") : (COINGECKO_RAW || "");
+  const key = isHttpUrl(COINGECKO_RAW as string)
+    ? (process.env.COINGECKO_API_KEY || "")
+    : (COINGECKO_RAW || "");
   const u = new URL(baseUrl);
   if (!u.pathname.endsWith("/simple/price")) u.pathname = "/api/v3/simple/price";
   u.searchParams.set("ids", "ethereum,usd-coin");
@@ -144,7 +142,7 @@ async function isContract(addr: string) {
 // ====== Route ======
 export async function GET(req: NextRequest) {
   try {
-    // Debug ping للتشخيص السريع
+    // Debug ping
     if (req.nextUrl.searchParams.get("debug") === "ping") {
       return new Response(JSON.stringify({ ok: true, note: "alive" }), {
         headers: { "content-type": "application/json" },
@@ -172,12 +170,17 @@ export async function GET(req: NextRequest) {
       basescan({ module: "account", action: "tokennfttx", address, startblock: "0", endblock: "99999999", page: "1", offset: "5000", sort: "asc" }),
     ]);
 
-    // ضمان Arrays قبل الاستخدام
-    const normal = ensureArray<any>(normalRaw);
-    const erc20  = ensureArray<any>(erc20Raw);
-    const erc721 = ensureArray<any>(erc721Raw);
+    // تشخيص: لو النتيجة مش Array اطبعها في اللوج
+    if (!Array.isArray(normalRaw?.result)) console.warn("txlist non-array", normalRaw);
+    if (!Array.isArray(erc20Raw?.result))  console.warn("tokentx non-array", erc20Raw);
+    if (!Array.isArray(erc721Raw?.result)) console.warn("tokennfttx non-array", erc721Raw);
 
-    const ok = normal.filter((t: any) => String(t.isError) === "0");
+    // طبّق asArr على الـ result
+    const normal = asArr<any>(normalRaw?.result);
+    const erc20  = asArr<any>(erc20Raw?.result);
+    const erc721 = asArr<any>(erc721Raw?.result);
+
+    const ok = normal.filter((t: any) => String(t?.isError) === "0");
     const now = Math.floor(Date.now() / 1000);
     const firstTxAt = ok[0] ? Number(ok[0].timeStamp) : null;
     const walletAgeDays = firstTxAt ? Math.floor((now - firstTxAt) / 86400) : 0;
@@ -253,13 +256,16 @@ export async function GET(req: NextRequest) {
     }
     const volumeUsdTotal = volumeEthUSD + usdcAmount * (px.usdc || 1);
 
-    // الرصيد (قد يعود string أو object أو array)
-    const balRes = await basescan({ module: "account", action: "balance", address, tag: "latest" });
-    let wei = "0";
-    if (Array.isArray(balRes)) wei = balRes?.[0]?.balance || "0";
-    else if (balRes && typeof balRes === "object") wei = (balRes as any)?.balance || "0";
-    else if (typeof balRes === "string") wei = balRes;
-    const balanceEth = Number(wei) / 1e18;
+    // الرصيد — balance قد يعود string
+    const balRaw = await basescan({ module: "account", action: "balance", address, tag: "latest" });
+    let balanceEth = 0;
+    if (balRaw && typeof balRaw.result !== "undefined") {
+      const weiStr = String(balRaw.result ?? "0");
+      const weiNum = Number(weiStr);
+      if (!Number.isNaN(weiNum)) balanceEth = weiNum / 1e18;
+    } else {
+      console.warn("balance missing/invalid", balRaw);
+    }
 
     // ========= Prescription Usage =========
     const DEX_KEYS: (keyof typeof PROTOCOL_ADDRS)[] = ["uniswap", "pancake", "sushi", "aerodrome", "matcha"];
