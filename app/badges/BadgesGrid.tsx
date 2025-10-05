@@ -15,12 +15,6 @@ import VitalSigns from "./VitalSigns";
 import CheckupFrequency from "./CheckupFrequency";
 import OnchainLifestyle from "./OnchainLifestyle";
 
-type Breakdown = {
-  direct?: number;
-  internal?: number;
-  sample?: string[];
-};
-
 type Props = {
   walletAge: number;
   txCount: number;
@@ -49,7 +43,6 @@ type Props = {
   acrossCount?: number;
 
   deployedContracts?: number;
-  breakdown?: Breakdown;
 
   uniswap?: number;
   aerodrome?: number;
@@ -88,7 +81,6 @@ export default function BadgesGrid({
   acrossCount = 0,
 
   deployedContracts = 0,
-  breakdown,
 
   uniswap = 0,
   aerodrome = 0,
@@ -133,10 +125,7 @@ export default function BadgesGrid({
         acrossCount={acrossCount}
       />
 
-      <MedicalStaff
-        deployedContracts={deployedContracts}
-        breakdown={breakdown}
-      />
+      <MedicalStaff deployedContracts={deployedContracts} />
 
       <SpecialClinics
         uniswap={uniswap}
