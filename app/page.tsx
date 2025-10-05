@@ -381,13 +381,12 @@ export default function Home() {
         {/* التقرير الرئيسي */}
         <ErrorBoundary name="MainReportTable">
           <div className="mb-6">
-           <MainReportTable
-  rows={rows}
-  verify={verify}
-  address={s?.address}
-  diagCounts={s?._diag?.counts ?? null}
-/>
-
+            <MainReportTable
+              rows={rows}
+              verify={verify}
+              address={s?.address}
+              diagCounts={s?._diag?.counts ?? null}
+            />
           </div>
         </ErrorBoundary>
 
@@ -416,10 +415,6 @@ export default function Home() {
           </ErrorBoundary>
         </div>
 
-        {/* لو حبيت تفعل الرادار لاحقًا:
-        <ProgressRadar areas={radarAreas} />
-        */}
-
         {/* شبكة البادجات */}
         <ErrorBoundary name="BadgesGrid">
           <BadgesGrid
@@ -446,7 +441,6 @@ export default function Home() {
             bungeeCount={s?.bungeeCount ?? 0}
             acrossCount={s?.acrossCount ?? 0}
             deployedContracts={s?.deployedContracts ?? 0}
-            breakdown={s?._diag?.deployed}
             uniswap={s?.uniswap ?? 0}
             aerodrome={s?.aerodrome ?? 0}
             aave={s?.aave ?? 0}
