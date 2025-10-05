@@ -15,7 +15,14 @@ import VitalSigns from "./VitalSigns";
 import CheckupFrequency from "./CheckupFrequency";
 import OnchainLifestyle from "./OnchainLifestyle";
 
-type Props = {
+type Breakdown = {
+  direct?: number;
+  internal?: number;
+  sample?: string[];
+};
+
+// ✨ اسم نوع فريد ومصدَّر لتجنّب أي تعارض أسماء عامّة مثل "Props"
+export type BadgesGridProps = {
   walletAge: number;
   txCount: number;
   activeDays: number;
@@ -43,6 +50,7 @@ type Props = {
   acrossCount?: number;
 
   deployedContracts?: number;
+  breakdown?: Breakdown;
 
   uniswap?: number;
   aerodrome?: number;
@@ -81,6 +89,7 @@ export default function BadgesGrid({
   acrossCount = 0,
 
   deployedContracts = 0,
+  breakdown,
 
   uniswap = 0,
   aerodrome = 0,
@@ -89,7 +98,7 @@ export default function BadgesGrid({
   metamask = 0,
   lendingAny = false,
   matcha = 0,
-}: Props) {
+}: BadgesGridProps) {
   return (
     <section className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
       <PatientHistory walletAge={walletAge} />
@@ -125,7 +134,7 @@ export default function BadgesGrid({
         acrossCount={acrossCount}
       />
 
-      <MedicalStaff deployedContracts={deployedContracts} />
+      <MedicalStaff deployedContracts={deployedContracts} breakdown={breakdown} />
 
       <SpecialClinics
         uniswap={uniswap}

@@ -149,8 +149,13 @@ async function etherscanV2(p: Record<string, string>) {
   });
 }
 
-/* === جلب كل صفحات معاملات العنوان (لتفادي سقف 5000) === */
-async function fetchAllNormalTxs(address: string, sort: "asc" | "desc" = "asc", pageSize = 5000) {
+/* === جلب كل صفحات معاملات العنوان (مع حد أقصى للصفحات) === */
+async function fetchAllNormalTxs(
+  address: string,
+  sort: "asc" | "desc" = "asc",
+  pageSize = 5000,
+  maxPages = 2
+) {
   let page = 1;
   const out: any[] = [];
   while (true) {
@@ -168,8 +173,8 @@ async function fetchAllNormalTxs(address: string, sort: "asc" | "desc" = "asc", 
     out.push(...batch);
     if (batch.length < pageSize) break;
     page++;
-    // تخفيف ضغط المعدّل
-    await new Promise((r) => setTimeout(r, 150));
+    if (page > maxPages) break; // ← حد أقصى
+    await new Promise((r) => setTimeout(r, 120)); // تهدئة بسيطة
   }
   return out;
 }
@@ -258,7 +263,7 @@ async function isContract(addr: string) {
 }
 
 /* ========= name/address resolver ========= */
-// أهم تعديل هنا: نُعيد نوع template literal ليتماشى مع دوال viem/getBasenameFor
+// نُعيد نوع template literal ليتماشى مع viem/getBasenameFor
 async function resolveAddressOrName(input: string | null): Promise<`0x${string}` | null> {
   if (!input) return null;
   const s = input.trim();
@@ -281,13 +286,18 @@ export async function GET(req: NextRequest) {
   const diag: SummaryDiag = { startedAt, steps: [] };
 
   try {
-    if (req.nextUrl.searchParams.get("debug") === "ping") {
+    const sp = req.nextUrl.searchParams;
+    const FAST = sp.get("fast") !== "0";     // fast=1 افتراضيًا
+    const TIME_BUDGET_MS = 25000;            // إذا تعدينا الوقت، نوقف المهام الثقيلة
+    const elapsed = () => Date.now() - startedAt;
+
+    if (sp.get("debug") === "ping") {
       return new Response(JSON.stringify({ ok: true, note: "alive" }), {
         headers: { "content-type": "application/json" },
       });
     }
 
-    const raw = (req.nextUrl.searchParams.get("address") || "").trim();
+    const raw = (sp.get("address") || "").trim();
     const address = await resolveAddressOrName(raw);
     if (!address) return new Response(JSON.stringify({ error: "Invalid address or name" }), { status: 400 });
 
@@ -298,8 +308,9 @@ export async function GET(req: NextRequest) {
 
     /* ---- fetch tx lists ---- */
     const t0 = Date.now();
-    // معاملات عادية — جميع الصفحات
-    const normal = await fetchAllNormalTxs(address, "asc", 5000);
+    // وضع سريع: صفحتين فقط من المعاملات العادية، وضع عميق: حتى 20
+    const normal = await fetchAllNormalTxs(address, "asc", 5000, FAST ? 2 : 20);
+
     // ERC20 / ERC721 صفحة واحدة تكفي غالبًا (زدها لاحقًا عند الحاجة)
     const [erc20Res, erc721Res] = await Promise.all([
       etherscanV2({
@@ -335,17 +346,20 @@ export async function GET(req: NextRequest) {
       .map((t) => toStr(t.hash))
       .filter(Boolean);
 
-    const MAX_TRACE = 400;         // للـ traces
-    const MAX_RECEIPTS = 600;      // للـ receipts
+    const MAX_TRACE = FAST ? 200 : 400;     // للـ traces
+    const MAX_RECEIPTS = FAST ? 200 : 600;  // للـ receipts
     const sentHashesTrace = sentHashesAll.slice(-MAX_TRACE);
     const sentHashesRcpt = sentHashesAll.slice(-MAX_RECEIPTS);
 
-    const [internalsByTx, receiptsMap] = await Promise.all([
-      fetchInternalsByTxHashes(sentHashesTrace, 6),
-      fetchReceiptsByHashes(sentHashesRcpt, 6),
-    ]);
+    const needHeavy = elapsed() < TIME_BUDGET_MS;
+    const [internalsByTx, receiptsMap] = needHeavy
+      ? await Promise.all([
+          fetchInternalsByTxHashes(sentHashesTrace, 6),
+          fetchReceiptsByHashes(sentHashesRcpt, 6),
+        ])
+      : [[], {} as Record<string, { contractAddress?: string | null }>];
 
-    const internalDeploys = internalsByTx
+    const internalDeploys = ensureArray<any>(internalsByTx)
       .filter(
         (it) =>
           ["create", "create2"].includes(lc(it.type)) &&
@@ -367,6 +381,8 @@ export async function GET(req: NextRequest) {
       traced_found_creates: internalDeploys.length,
       receipts_checked: sentHashesRcpt.length,
       receipt_creates: receiptCreates.length,
+      fast_mode: FAST,
+      heavy_skipped_due_time: !needHeavy,
     });
 
     /* ---- basic stats ---- */
@@ -415,7 +431,7 @@ export async function GET(req: NextRequest) {
     const bridgeCounts: Record<string, number> = {};
     for (const k of thirdPartyKeys) bridgeCounts[k] = 0;
 
-    // عقود الجسر الرسمي على L2 (سحب L2→L1) — عدّل إذا عندك عناوين أدق
+    // عقود الجسر الرسمي على L2 (سحب L2→L1)
     const NATIVE_L2_OUT = new Set(
       ["0x4200000000000000000000000000000000000010", "0x4200000000000000000000000000000000000011"].map((x) =>
         x.toLowerCase()
@@ -696,13 +712,13 @@ export async function GET(req: NextRequest) {
       lendingAny,
     };
 
-    if (req.nextUrl.searchParams.get("debug") === "diag") {
+    if (sp.get("debug") === "diag") {
       diag.finishedAt = Date.now();
       diag.total_ms = diag.finishedAt - startedAt;
       body._diag = {
         ...diag,
         counts: { normal: normal.length, erc20: erc20.length, erc721: erc721.length, internals: internalDeploys.length },
-        swapHashes: Array.from(new Set(sentHashesTrace)).slice(0, 100),
+        swapHashes: Array.from(new Set(sentHashesAll)).slice(0, 100),
         bridgeHits: { ...bridgeCounts, native: nativeBridgeUsed ? 1 : 0 },
         dexHits: Object.fromEntries(Object.keys(PROTOCOL_ADDRS as any).map((k) => [k, 0])),
         deployed: {
