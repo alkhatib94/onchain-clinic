@@ -13,6 +13,26 @@ import { computeHealth } from "@/app/lib/healthScore";
 import FinalDiagnosisCard from "@/components/FinalDiagnosisCard";
 import DoctorSummary from "@/components/DoctorSummary";
 
+// NEW: ErrorBoundary
+import ErrorBoundary from "./components/ErrorBoundary";
+
+/* ========= Types ========= */
+type DeployedBreakdown = {
+  direct?: number;
+  internal?: number;
+  sample?: string[];
+};
+
+type SummaryDiag = {
+  total_ms?: number;
+  statuses?: Record<string, string>;
+  counts?: { normal: number; erc20: number; erc721: number; internals: number };
+  swapHashes?: string[];
+  bridgeHits?: Record<string, number>;
+  dexHits?: Record<string, number>;
+  deployed?: DeployedBreakdown;
+};
+
 type Summary = {
   address: string;
   baseEns: string | null;
@@ -63,49 +83,67 @@ type Summary = {
   metamask?: number;
   lendingAny?: boolean;
   matcha?: number;
+
+  _diag?: SummaryDiag;
 };
 
 function isSummary(x: any): x is Summary {
   return x && typeof x === "object" && "volume" in x && "contracts" in x && "walletAgeDays" in x;
 }
 
+/** فحص مبكّر للإدخال لتجنّب أي طلب غير صالح */
+const isLikelyAddrOrBasename = (x: string) =>
+  /^0x[0-9a-fA-F]{40}$/.test(x) || /\.base\.eth$/i.test(x);
+
 export default function Home() {
   const [data, setData] = useState<Summary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // مفتاح التحقق
+  const [verify, setVerify] = useState<boolean>(false);
+
   // للتحكم في السباقات + تذكر آخر عنوان
   const ctrlRef = useRef<AbortController | null>(null);
   const lastAddrRef = useRef<string>("");
 
-  // قراءة ?address من الرابط بعد الـ mount (بدون useSearchParams)
+  // قراءة ?address و ?verify من الرابط بعد الـ mount
   const [initial, setInitial] = useState<string>("");
   useEffect(() => {
     try {
       const sp = new URLSearchParams(window.location.search);
       const a = (sp.get("address") || "").trim();
       if (a) setInitial(a);
+      const v = sp.get("verify");
+      if (v === "1" || v === "true") setVerify(true);
     } catch {}
   }, []);
 
   // تشغيل تلقائي إذا كان العنوان موجود بالرابط
   useEffect(() => {
     if (initial && initial.toLowerCase() !== lastAddrRef.current.toLowerCase()) {
-      run(initial);
+      run(initial, verify);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initial]);
 
-  const run = async (addr: string) => {
+  const run = async (addr: string, withVerify?: boolean) => {
     const clean = (addr || "").trim();
     setError(null);
 
     if (!clean) {
-      setError("please enter your wallet");
+      setError("Please enter your wallet address or basename.");
       return;
     }
+
+    // فحص صحة الإدخال (0x… أو name.base.eth)
+    if (!isLikelyAddrOrBasename(clean)) {
+      setError("Enter a valid 0x… address or name.base.eth");
+      return;
+    }
+
     // لا تعيد الجلب إذا نفس العنوان والبيانات موجودة
-    if (clean.toLowerCase() === lastAddrRef.current.toLowerCase() && data) return;
+    if (clean.toLowerCase() === lastAddrRef.current.toLowerCase() && data && withVerify === undefined) return;
     lastAddrRef.current = clean;
 
     // ألغِ أي طلب سابق
@@ -117,17 +155,19 @@ export default function Home() {
     try {
       const u = new URL(window.location.href);
       u.searchParams.set("address", clean);
+      if (withVerify ?? verify) u.searchParams.set("verify", "1");
+      else u.searchParams.delete("verify");
       window.history.replaceState(null, "", u.pathname + "?" + u.searchParams.toString());
     } catch {}
 
-    // مهلة للطلب
-    const timeout = setTimeout(() => ctrl.abort(), 15000);
+    const timeout = setTimeout(() => ctrl.abort(), 30000);
 
     try {
       setLoading(true);
 
       const apiUrl = new URL("/api/summary", window.location.origin);
       apiUrl.searchParams.set("address", clean);
+      if (withVerify ?? verify) apiUrl.searchParams.set("debug", "diag");
 
       const r = await fetch(apiUrl.toString(), { cache: "no-store", signal: ctrl.signal });
 
@@ -158,7 +198,7 @@ export default function Home() {
 
   const s: Summary | null = data && isSummary(data) ? data : null;
 
-  // صفوف التقرير الرئيسي
+  // صفوف التقرير الرئيسي (دائمًا مصفوفة — آمن)
   const rows = [
     { name: "Base ENS", value: s?.baseEns ?? "N/A" },
     { name: "Wallet age", value: s ? `${s.walletAgeDays.toLocaleString()} Days` : "N/A" },
@@ -241,11 +281,96 @@ export default function Home() {
     lifestyle: (health as any)?.areas?.lifestyle ?? 0,
   };
 
+  // ===== لوحة تحقق مصغّرة (Inline) =====
+  const VerifyPanelInline = ({ summary }: { summary: Summary }) => {
+    const diag = summary?._diag;
+    if (!diag) return null;
+
+    const issues: string[] = [];
+
+    // فرق واضح بين swaps و swapHashes
+    if (typeof summary.swaps === "number" && Array.isArray(diag.swapHashes)) {
+      const approx = diag.swapHashes.length;
+      if (approx && Math.abs(summary.swaps - approx) > 2) {
+        issues.push(`Swaps mismatch: UI=${summary.swaps}, diag≈${approx}`);
+      }
+    }
+
+    // طرف ثالث مفعّل بدون عدادات
+    if (summary.usedThirdPartyBridge && diag.bridgeHits) {
+      const sum = Object.values(diag.bridgeHits).reduce((a: number, b: any) => a + Number(b || 0), 0);
+      if (!sum) issues.push("Third-party bridge flagged but counts=0");
+    }
+
+    return (
+      <div className="mt-4 rounded-xl border border-neutral-700 bg-neutral-900/60 p-4 text-sm">
+        <div className="flex items-center justify-between">
+          <strong>Verification</strong>
+          <span className={issues.length ? "text-amber-400" : "text-green-400"}>
+            {issues.length ? "⚠️ Issues found" : "✅ Verified"}
+          </span>
+        </div>
+
+        {issues.length > 0 && (
+          <ul className="mt-2 list-disc ps-6 text-amber-300">
+            {issues.map((x, i) => (
+              <li key={i}>{x}</li>
+            ))}
+          </ul>
+        )}
+
+        <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-3">
+          <div>
+            <div className="opacity-70">Fetch time</div>
+            <div>{diag.total_ms ? `${diag.total_ms} ms` : "—"}</div>
+          </div>
+          <div>
+            <div className="opacity-70">Tx counts</div>
+            <div>
+              normal: {diag.counts?.normal ?? 0} • erc20: {diag.counts?.erc20 ?? 0} • erc721:{" "}
+              {diag.counts?.erc721 ?? 0} • internals: {diag.counts?.internals ?? 0}
+            </div>
+          </div>
+          <div>
+            <div className="opacity-70">Swaps sample</div>
+            <div className="break-all">
+              {(diag.swapHashes ?? []).slice(0, 4).map((h: string) => (
+                <a
+                  key={h}
+                  className="me-2 underline"
+                  href={`https://basescan.org/tx/${h}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {h.slice(0, 10)}…
+                </a>
+              ))}
+              {(diag.swapHashes?.length ?? 0) > 4 ? "…" : ""}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <main className={`${brand.bg} ${brand.text} min-h-screen p-6`}>
       <div className="max-w-6xl mx-auto">
         <Header />
-        <WalletBar onCheck={run} loading={loading} />
+
+        {/* شريط المحفظة + مفتاح Verify */}
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <WalletBar onCheck={(a: string) => run(a, verify)} loading={loading} />
+          <label className="flex items-center gap-2 text-sm whitespace-nowrap">
+            <input
+              type="checkbox"
+              checked={verify}
+              onChange={(e) => setVerify(e.target.checked)}
+              disabled={loading}
+            />
+            Verify data
+          </label>
+        </div>
 
         {error && (
           <div className="mb-6 px-4 py-3 rounded-xl border border-rose-500/40 bg-rose-500/10">
@@ -253,65 +378,91 @@ export default function Home() {
           </div>
         )}
 
-        <div className="mb-6">
-          <MainReportTable rows={rows} />
-        </div>
+        {/* التقرير الرئيسي */}
+        <ErrorBoundary name="MainReportTable">
+          <div className="mb-6">
+           <MainReportTable
+  rows={rows}
+  verify={verify}
+  address={s?.address}
+  diagCounts={s?._diag?.counts ?? null}
+/>
 
+          </div>
+        </ErrorBoundary>
+
+        {/* الكروت */}
         <div className="grid md:grid-cols-2 gap-4 mb-6">
-          <FinalDiagnosisCard
-            score={health.score}
-            level={health.level}
-            emoji={health.emoji}
-            strongest={health.strongest}
-            weakest={health.weakest}
-            onMint={async () => {
-              await new Promise((res) => setTimeout(res, 600));
-            }}
-          />
-          <DoctorSummary
-            score={health.score}
-            level={health.level}
-            strongest={health.strongest}
-            weakest={health.weakest}
-          />
+          <ErrorBoundary name="FinalDiagnosisCard">
+            <FinalDiagnosisCard
+              score={health.score}
+              level={health.level}
+              emoji={health.emoji}
+              strongest={health.strongest}
+              weakest={health.weakest}
+              onMint={async () => {
+                await new Promise((res) => setTimeout(res, 600));
+              }}
+            />
+          </ErrorBoundary>
+
+          <ErrorBoundary name="DoctorSummary">
+            <DoctorSummary
+              score={health.score}
+              level={health.level}
+              strongest={health.strongest}
+              weakest={health.weakest}
+            />
+          </ErrorBoundary>
         </div>
 
         {/* لو حبيت تفعل الرادار لاحقًا:
         <ProgressRadar areas={radarAreas} />
         */}
 
-        <BadgesGrid
-          walletAge={s?.walletAgeDays ?? 0}
-          txCount={txCount}
-          activeDays={s?.uniqueDays ?? 0}
-          txTimestampsUTC={s?.allTxTimestampsUTC ?? []}
-          mainnetLaunchUTC={s?.mainnetLaunchUTC ?? "2023-08-09T00:00:00Z"}
-          holidayDatesUTC={s?.holidayDatesUTC ?? []}
-          uniqueContracts={s?.contracts?.uniqueInteractions ?? 0}
-          totalVolumeEth={s?.volume.eth ?? 0}
-          gasEth={s?.gasEth ?? 0}
-          swaps={s?.swaps ?? 0}
-          stablecoinTxs={s?.stablecoinTxs ?? 0}
-          usdcTrades={s?.usdcTrades ?? 0}
-          stablecoinTypes={s?.stablecoinTypes ?? 0}
-          maxSwapUsd={s?.maxSwapUsd ?? 0}
-          erc20Count={s?.erc20Count ?? 0}
-          nftCount={s?.nftCount ?? 0}
-          usedThirdPartyBridge={s?.usedThirdPartyBridge ?? false}
-          usedNativeBridge={s?.usedNativeBridge ?? false}
-          relayCount={s?.relayCount ?? 0}
-          jumperCount={s?.jumperCount ?? 0}
-          bungeeCount={s?.bungeeCount ?? 0}
-          acrossCount={s?.acrossCount ?? 0}
-          deployedContracts={s?.deployedContracts ?? 0}
-          uniswap={s?.uniswap ?? 0}
-          aerodrome={s?.aerodrome ?? 0}
-          aave={s?.aave ?? 0}
-          stargate={s?.stargate ?? 0}
-          metamask={s?.metamask ?? 0}
-          lendingAny={s?.lendingAny ?? false}
-          matcha={s?.matcha ?? 0}
-        />
+        {/* شبكة البادجات */}
+        <ErrorBoundary name="BadgesGrid">
+          <BadgesGrid
+            walletAge={s?.walletAgeDays ?? 0}
+            txCount={txCount}
+            activeDays={s?.uniqueDays ?? 0}
+            txTimestampsUTC={s?.allTxTimestampsUTC ?? []}
+            mainnetLaunchUTC={s?.mainnetLaunchUTC ?? "2023-08-09T00:00:00Z"}
+            holidayDatesUTC={s?.holidayDatesUTC ?? []}
+            uniqueContracts={s?.contracts?.uniqueInteractions ?? 0}
+            totalVolumeEth={s?.volume.eth ?? 0}
+            gasEth={s?.gasEth ?? 0}
+            swaps={s?.swaps ?? 0}
+            stablecoinTxs={s?.stablecoinTxs ?? 0}
+            usdcTrades={s?.usdcTrades ?? 0}
+            stablecoinTypes={s?.stablecoinTypes ?? 0}
+            maxSwapUsd={s?.maxSwapUsd ?? 0}
+            erc20Count={s?.erc20Count ?? 0}
+            nftCount={s?.nftCount ?? 0}
+            usedThirdPartyBridge={s?.usedThirdPartyBridge ?? false}
+            usedNativeBridge={s?.usedNativeBridge ?? false}
+            relayCount={s?.relayCount ?? 0}
+            jumperCount={s?.jumperCount ?? 0}
+            bungeeCount={s?.bungeeCount ?? 0}
+            acrossCount={s?.acrossCount ?? 0}
+            deployedContracts={s?.deployedContracts ?? 0}
+            breakdown={s?._diag?.deployed}
+            uniswap={s?.uniswap ?? 0}
+            aerodrome={s?.aerodrome ?? 0}
+            aave={s?.aave ?? 0}
+            stargate={s?.stargate ?? 0}
+            metamask={s?.metamask ?? 0}
+            lendingAny={s?.lendingAny ?? false}
+            matcha={s?.matcha ?? 0}
+          />
+        </ErrorBoundary>
+
+        {/* لوحة تحقق داخلية (تظهر فقط عند ?debug=diag) */}
+        {s?._diag && (
+          <ErrorBoundary name="VerifyPanelInline">
+            <VerifyPanelInline summary={s} />
+          </ErrorBoundary>
+        )}
       </div>
     </main>
   );

@@ -4,7 +4,9 @@ export type ProtoKey =
   | "uniswap" | "sushi" | "pancake" | "aerodrome"
   | "aave" | "limitless" | "stargate" | "metamask" | "matcha";
 
-/** كلمات مفتاحية احتياطية لو ما كان عندنا عنوان ثابت أو لاكتشاف حالات إضافية */
+/**
+ * كلمات مفتاحية احتياطية عند غياب العناوين أو لاكتشاف حالات إضافية.
+ */
 export const PROTOCOL_KEYWORDS: Record<ProtoKey, string[]> = {
   uniswap:   ["uniswap", "v3swap", "exactinput", "exactoutput", "universalrouter"],
   sushi:     ["sushi", "uniswapv2", "v2router"],
@@ -13,11 +15,13 @@ export const PROTOCOL_KEYWORDS: Record<ProtoKey, string[]> = {
   aave:      ["aave", "pool", "borrow", "repay", "supply", "withdraw"],
   limitless: ["limitless"],
   stargate:  ["stargate", "routereth"],
-  metamask:  ["metamask", "mm", "bridge"],       // بدون عناوين رسمية الآن
+  metamask:  ["metamask", "mm", "router", "spender"],
   matcha:    ["matcha", "0x", "exchangeproxy", "transformerc"],
 };
 
-/** قوائم العناوين المعروفة على Base (كلها lowercase للتطابق السريع) */
+/**
+ * قوائم العناوين المعروفة على Base (كلها lowercase للتطابق السريع).
+ */
 export const PROTOCOL_ADDRS: Record<ProtoKey, string[]> = {
   uniswap: [
     // Universal Router + SwapRouter02 على Base
@@ -35,9 +39,9 @@ export const PROTOCOL_ADDRS: Record<ProtoKey, string[]> = {
   ],
   aerodrome: [
     // Aerodrome على Base
-    "0x6cb442acf35158d5eda88fe602221b67b400be3e", // Universal Router (labelled)
-    "0xbe6d8f0d05cc4be24d5167a3ef062215be6d18a5", // Slipstream Swap Router
-    "0xcf77a3ba9a5ca399b7c97c74d54e5b1beb874e43", // Router قديم/بديل
+    "0x6cb442acf35158d5eda88fe602221b67b400be3e", // Universal Router
+    "0xbe6d8f0d05cc4be24d5167a3ef062215be6d18a5", // Slipstream Router
+    "0xcf77a3ba9a5ca399b7c97c74d54e5b1beb874e43", // Router بديل
   ],
   aave: [
     // Aave V3 على Base
@@ -51,7 +55,8 @@ export const PROTOCOL_ADDRS: Record<ProtoKey, string[]> = {
     "0xaf54be5b6eec24d6bfacf1cce4eaf680a8239398", // Bridge.sol
   ],
   metamask: [
-    // لا يوجد مصدر رسمي عام لRouter/Spender على Base حتى الآن — اتركها فارغة مؤقتًا
+    // MetaMask Router (spender) على Base
+    "0x9dda6ef3d919c9bc8885d5560999a3640431e8e6",
   ],
   matcha: [
     // 0x Exchange Proxy على Base (Matcha)
@@ -61,3 +66,28 @@ export const PROTOCOL_ADDRS: Record<ProtoKey, string[]> = {
     // لا توجد قائمة عناوين رسمية موثقة حاليًا — اتركها فارغة مؤقتًا
   ],
 };
+
+/* ------------------------------------------------------------------
+   إضافات اختيارية مفيدة
+------------------------------------------------------------------- */
+
+const ensureLowerUnique = (arr: string[]) => {
+  const s = new Set<string>();
+  for (const a of arr) {
+    const v = (a || "").toLowerCase();
+    if (v) s.add(v);
+  }
+  return Array.from(s);
+};
+
+Object.keys(PROTOCOL_ADDRS).forEach((k) => {
+  // تأكد أن أي تعديل مستقبلي يظل lowercase & unique
+  // @ts-ignore
+  PROTOCOL_ADDRS[k] = ensureLowerUnique(PROTOCOL_ADDRS[k as ProtoKey]);
+});
+
+/** نفس العناوين لكن كمجموعات Sets (اختياري للاستخدام داخل الـ API) */
+export const PROTOCOL_ADDRS_SET: Record<ProtoKey, Set<string>> = Object.fromEntries(
+  (Object.entries(PROTOCOL_ADDRS) as [ProtoKey, string[]][])
+    .map(([k, list]) => [k, new Set(list)])
+) as Record<ProtoKey, Set<string>>;

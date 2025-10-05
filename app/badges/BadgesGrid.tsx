@@ -15,15 +15,21 @@ import VitalSigns from "./VitalSigns";
 import CheckupFrequency from "./CheckupFrequency";
 import OnchainLifestyle from "./OnchainLifestyle";
 
+type Breakdown = {
+  direct?: number;
+  internal?: number;
+  sample?: string[];
+};
+
 type Props = {
   walletAge: number;
   txCount: number;
   activeDays: number;
-  txTimestampsUTC: string[];
-  mainnetLaunchUTC: string;
-  holidayDatesUTC: string[];
 
-  // القيم الأخرى الاختيارية
+  txTimestampsUTC?: string[];
+  mainnetLaunchUTC?: string;
+  holidayDatesUTC?: string[];
+
   uniqueContracts?: number;
   swaps?: number;
   stablecoinTxs?: number;
@@ -43,8 +49,8 @@ type Props = {
   acrossCount?: number;
 
   deployedContracts?: number;
+  breakdown?: Breakdown;
 
-  // SpecialClinics-only (بدون sushi/pancake/limitless)
   uniswap?: number;
   aerodrome?: number;
   aave?: number;
@@ -54,52 +60,92 @@ type Props = {
   matcha?: number;
 };
 
-export default function BadgesGrid(props: Props) {
+export default function BadgesGrid({
+  walletAge,
+  txCount,
+  activeDays,
+
+  txTimestampsUTC = [],
+  mainnetLaunchUTC = "2023-08-09T00:00:00Z",
+  holidayDatesUTC = [],
+
+  uniqueContracts = 0,
+  swaps = 0,
+  stablecoinTxs = 0,
+  usdcTrades = 0,
+  stablecoinTypes = 0,
+  maxSwapUsd = 0,
+  erc20Count = 0,
+  nftCount = 0,
+  totalVolumeEth = 0,
+  gasEth = 0,
+
+  usedThirdPartyBridge = false,
+  usedNativeBridge = false,
+  relayCount = 0,
+  jumperCount = 0,
+  bungeeCount = 0,
+  acrossCount = 0,
+
+  deployedContracts = 0,
+  breakdown,
+
+  uniswap = 0,
+  aerodrome = 0,
+  aave = 0,
+  stargate = 0,
+  metamask = 0,
+  lendingAny = false,
+  matcha = 0,
+}: Props) {
   return (
     <section className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
-      <PatientHistory walletAge={props.walletAge} />
-      <VitalSigns txCount={props.txCount} />
-      <CheckupFrequency activeDays={props.activeDays} />
+      <PatientHistory walletAge={walletAge} />
+      <VitalSigns txCount={txCount} />
+      <CheckupFrequency activeDays={activeDays} />
 
       <OnchainLifestyle
-        txTimestampsUTC={props.txTimestampsUTC}
-        mainnetLaunchUTC={props.mainnetLaunchUTC}
-        holidayDatesUTC={props.holidayDatesUTC}
+        txTimestampsUTC={txTimestampsUTC}
+        mainnetLaunchUTC={mainnetLaunchUTC}
+        holidayDatesUTC={holidayDatesUTC}
       />
 
-      <TreatmentPlans uniqueContracts={props.uniqueContracts ?? 0} />
+      <TreatmentPlans uniqueContracts={uniqueContracts} />
       <PrescriptionUsage
-        swaps={props.swaps ?? 0}
-        stablecoinTxs={props.stablecoinTxs ?? 0}
-        usdcTrades={props.usdcTrades ?? 0}
-        stablecoinTypes={props.stablecoinTypes ?? 0}
-        maxSwapUsd={props.maxSwapUsd ?? 0}
+        swaps={swaps}
+        stablecoinTxs={stablecoinTxs}
+        usdcTrades={usdcTrades}
+        stablecoinTypes={stablecoinTypes}
+        maxSwapUsd={maxSwapUsd}
       />
 
-      <MedicationVariety erc20Count={props.erc20Count ?? 0} />
-      <ImagingRecords nftCount={props.nftCount ?? 0} />
-      <OnchainDosage totalVolumeEth={props.totalVolumeEth ?? 0} />
+      <MedicationVariety erc20Count={erc20Count} />
+      <ImagingRecords nftCount={nftCount} />
+      <OnchainDosage totalVolumeEth={totalVolumeEth} />
 
-      <TreatmentCosts gasEth={props.gasEth ?? 0} />
+      <TreatmentCosts gasEth={gasEth} />
       <Referrals
-        usedThirdPartyBridge={props.usedThirdPartyBridge ?? false}
-        usedNativeBridge={props.usedNativeBridge ?? false}
-        relayCount={props.relayCount ?? 0}
-        jumperCount={props.jumperCount ?? 0}
-        bungeeCount={props.bungeeCount ?? 0}
-        acrossCount={props.acrossCount ?? 0}
+        usedThirdPartyBridge={usedThirdPartyBridge}
+        usedNativeBridge={usedNativeBridge}
+        relayCount={relayCount}
+        jumperCount={jumperCount}
+        bungeeCount={bungeeCount}
+        acrossCount={acrossCount}
       />
 
-      <MedicalStaff deployedContracts={props.deployedContracts ?? 0} />
+      <MedicalStaff
+        deployedContracts={deployedContracts}
+        breakdown={breakdown}
+      />
 
       <SpecialClinics
-        uniswap={props.uniswap ?? 0}
-        aerodrome={props.aerodrome ?? 0}
-        aave={props.aave ?? 0}
-        stargate={props.stargate ?? 0}
-        metamask={props.metamask ?? 0}
-        lendingAny={props.lendingAny ?? false}
-        matcha={props.matcha ?? 0}
+        uniswap={uniswap}
+        aerodrome={aerodrome}
+        aave={aave}
+        stargate={stargate}
+        metamask={metamask}
+        lendingAny={lendingAny}
+        matcha={matcha}
       />
     </section>
   );

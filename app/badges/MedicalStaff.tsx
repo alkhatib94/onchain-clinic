@@ -1,18 +1,22 @@
 // app/badges/MedicalStaff.tsx
+
 "use client";
 
 type Props = {
-  deployedContracts: number;
+  /** إجمالي عدد العقود المنشورة (يجي من الـ API) */
+  deployedContracts?: number;
 };
 
 export default function MedicalStaff({ deployedContracts = 0 }: Props) {
+  const totalDeployed = Math.max(0, Number(deployedContracts) || 0);
+
   const items = [
-    { title: "Resident I", desc: "Deploy ≥ 3 contracts", ok: deployedContracts >= 3 },
-    { title: "Resident II", desc: "Deploy ≥ 5 contracts", ok: deployedContracts >= 5 },
-    { title: "Resident III", desc: "Deploy ≥ 10 contracts", ok: deployedContracts >= 10 },
-    { title: "Senior Resident", desc: "Deploy ≥ 20 contracts", ok: deployedContracts >= 20 },
-    { title: "Attending Doctor", desc: "Deploy ≥ 50 contracts", ok: deployedContracts >= 50 },
-    { title: "Chief Surgeon", desc: "Deploy ≥ 100 contracts", ok: deployedContracts >= 100 },
+    { title: "Resident I",       desc: "Deploy ≥ 3 contracts",    ok: totalDeployed >= 3 },
+    { title: "Resident II",      desc: "Deploy ≥ 5 contracts",    ok: totalDeployed >= 5 },
+    { title: "Resident III",     desc: "Deploy ≥ 10 contracts",   ok: totalDeployed >= 10 },
+    { title: "Senior Resident",  desc: "Deploy ≥ 20 contracts",   ok: totalDeployed >= 20 },
+    { title: "Attending Doctor", desc: "Deploy ≥ 50 contracts",   ok: totalDeployed >= 50 },
+    { title: "Chief Surgeon",    desc: "Deploy ≥ 100 contracts",  ok: totalDeployed >= 100 },
   ];
 
   const done = items.filter((i) => i.ok).length;
@@ -22,9 +26,9 @@ export default function MedicalStaff({ deployedContracts = 0 }: Props) {
   return (
     <section className="rounded-2xl border border-white/10 bg-black/20 overflow-hidden h-full flex flex-col">
       {/* Header */}
-      <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between">
+      <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between gap-3">
         <div className="text-[15px] font-semibold">Medical Staff</div>
-        <div className="text-sm opacity-70">Deployed: {deployedContracts}</div>
+        <div className="text-sm opacity-80">Deployed: {totalDeployed}</div>
       </div>
 
       {/* Items */}
@@ -66,14 +70,11 @@ export default function MedicalStaff({ deployedContracts = 0 }: Props) {
           </span>
         </div>
         <div className="relative h-3 rounded-full bg-white/8 overflow-hidden">
-          {/* الخلفية */}
           <div className="absolute inset-0 opacity-40 bg-gradient-to-r from-emerald-400/30 via-sky-400/30 to-violet-400/30" />
-          {/* المؤشر */}
           <div
             className="relative h-full rounded-full bg-gradient-to-r from-emerald-400 via-sky-400 to-violet-400 transition-all duration-700"
             style={{ width: `${pct}%` }}
           />
-          {/* النص داخل الخط */}
           <div className="absolute inset-0 flex items-center justify-center text-[11px] font-medium">
             {done}/{total} ({pct}%)
           </div>

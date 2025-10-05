@@ -5,13 +5,17 @@ type Level = "Critical" | "Weak" | "Fair" | "Healthy" | "Elite";
 
 type Props = {
   score: number;                         // 0..100
-  level: Level;                          // تصنيف الصحة النهائي
-  strongest: string;                     // اسم المجال الأقوى (مثال: "Gas", "Diversity", "Swaps")
-  weakest: string;                       // اسم المجال الأضعف
+  level: Level;                          // التصنيف النهائي
+  strongest?: string | string[];         // قد تأتي نصًا أو مصفوفة
+  weakest?: string | string[];           // قد تأتي نصًا أو مصفوفة
 };
 
 export default function DoctorSummary({ score, level, strongest, weakest }: Props) {
   const accent = levelAccent(level);
+
+  // طبّع المدخلات: خذ أول عنصر فقط لو كانت مصفوفة
+  const strongestOne = asSingle(strongest);
+  const weakestOne   = asSingle(weakest);
 
   // 1) رسالة موجزة حسب المستوى
   const headline = levelHeadline(level);
@@ -20,8 +24,8 @@ export default function DoctorSummary({ score, level, strongest, weakest }: Prop
   const levelTips = tipsByLevel(level);
 
   // 3) نصائح ذكية من نقطة الضعف/القوة
-  const strengthTips = tipsFromArea(strongest, "strong");
-  const weaknessTips = tipsFromArea(weakest, "weak");
+  const strengthTips = tipsFromArea(strongestOne, "strong");
+  const weaknessTips = tipsFromArea(weakestOne, "weak");
 
   // دمج وتقليم التكرار وإنتاج حزمة قصيرة واضحة
   const unique = dedupe([...weaknessTips, ...levelTips, ...strengthTips]).slice(0, 5);
@@ -51,8 +55,8 @@ export default function DoctorSummary({ score, level, strongest, weakest }: Prop
 
         {/* Strength / Weakness chips */}
         <div className="flex flex-wrap gap-2">
-          <Chip label={`Strongest: ${cap(strongest || "—")}`} intent="good" />
-          <Chip label={`Needs attention: ${cap(weakest || "—")}`} intent="warn" />
+          <Chip label={`Strongest: ${cap(strongestOne || "—")}`} intent="good" />
+          <Chip label={`Needs attention: ${cap(weakestOne || "—")}`} intent="warn" />
         </div>
 
         {/* Actionable advice */}
@@ -69,6 +73,15 @@ export default function DoctorSummary({ score, level, strongest, weakest }: Prop
   );
 }
 
+/* ---------- Utilities ---------- */
+
+// يحول string|string[] إلى نص واحد (أول عنصر عند وجود مصفوفة)
+function asSingle(v?: string | string[]): string {
+  if (!v) return "";
+  if (Array.isArray(v)) return (v.find(Boolean) || "") + "";
+  return v + "";
+}
+
 /* ---------- UI bits ---------- */
 
 function Chip({ label, intent }: { label: string; intent: "good" | "warn" }) {
@@ -76,11 +89,7 @@ function Chip({ label, intent }: { label: string; intent: "good" | "warn" }) {
     intent === "good"
       ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
       : "bg-rose-500/15 text-rose-300 border border-rose-500/30";
-  return (
-    <span className={`text-xs px-2.5 py-1 rounded-md ${cls}`}>
-      {label}
-    </span>
-  );
+  return <span className={`text-xs px-2.5 py-1 rounded-md ${cls}`}>{label}</span>;
 }
 
 /* ---------- Logic helpers ---------- */
@@ -88,36 +97,16 @@ function Chip({ label, intent }: { label: string; intent: "good" | "warn" }) {
 function levelAccent(level: Level) {
   switch (level) {
     case "Elite":
-      return {
-        badgeBg: "bg-emerald-500/15",
-        badgeText: "text-emerald-300",
-        badgeBorder: "border-emerald-500/30",
-      };
+      return { badgeBg: "bg-emerald-500/15", badgeText: "text-emerald-300", badgeBorder: "border-emerald-500/30" };
     case "Healthy":
-      return {
-        badgeBg: "bg-teal-500/15",
-        badgeText: "text-teal-300",
-        badgeBorder: "border-teal-500/30",
-      };
+      return { badgeBg: "bg-teal-500/15", badgeText: "text-teal-300", badgeBorder: "border-teal-500/30" };
     case "Fair":
-      return {
-        badgeBg: "bg-yellow-500/15",
-        badgeText: "text-yellow-200",
-        badgeBorder: "border-yellow-500/30",
-      };
+      return { badgeBg: "bg-yellow-500/15", badgeText: "text-yellow-200", badgeBorder: "border-yellow-500/30" };
     case "Weak":
-      return {
-        badgeBg: "bg-orange-500/15",
-        badgeText: "text-orange-200",
-        badgeBorder: "border-orange-500/30",
-      };
+      return { badgeBg: "bg-orange-500/15", badgeText: "text-orange-200", badgeBorder: "border-orange-500/30" };
     case "Critical":
     default:
-      return {
-        badgeBg: "bg-rose-500/15",
-        badgeText: "text-rose-200",
-        badgeBorder: "border-rose-500/30",
-      };
+      return { badgeBg: "bg-rose-500/15", badgeText: "text-rose-200", badgeBorder: "border-rose-500/30" };
   }
 }
 
@@ -175,7 +164,6 @@ function tipsByLevel(level: Level): string[] {
 
 function tipsFromArea(area: string, kind: "strong" | "weak"): string[] {
   const s = (area || "").toLowerCase();
-  // مفاتيح شائعة: swaps, gas, diversity, lending, bridges, nfts, volume, activity
   if (includesAny(s, ["gas", "fee"])) {
     return kind === "weak"
       ? ["Use batching or routers that optimize gas.", "Stick to off-peak times to lower base fees."]
@@ -216,7 +204,6 @@ function tipsFromArea(area: string, kind: "strong" | "weak"): string[] {
       ? ["Target a simple 3-day streak this week.", "Schedule small recurring actions to build rhythm."]
       : ["Maintain a steady cadence; avoid unnecessary bursts.", "Back up your flow with notes/alerts."];
   }
-  // fallback نصائح عامة
   return kind === "weak"
     ? ["Start small on a reputable protocol and measure gas & slippage.", "Avoid new or unlabeled contracts until score improves."]
     : ["Keep your rhythm; review approvals monthly.", "Document what works and reuse winning patterns."];

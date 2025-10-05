@@ -1,3 +1,4 @@
+// app/badges/Badge.tsx
 "use client";
 
 type Item = { title: string; desc?: string; ok: boolean };
@@ -6,17 +7,17 @@ type Progress = { done: number; total: number };
 export default function Badge({
   title,
   statRight,
-  items,
+  items = [],       // 👈 افتراضي آمن
   progress,
 }: {
   title: string;
   statRight?: string;
-  items: Item[];
+  items?: Item[];
   progress?: Progress;
 }) {
-  const done = progress ? progress.done : items.filter(i => i.ok).length;
-  const total = progress ? progress.total : items.length;
-  const pct = Math.round((done / Math.max(total, 1)) * 100);
+  const done = items.filter((i) => i.ok).length;
+  const total = items.length || (progress?.total ?? 0);
+  const pct = total > 0 ? Math.round(((progress?.done ?? done) / total) * 100) : 0;
 
   return (
     <section className="rounded-2xl border border-white/10 bg-black/20 overflow-hidden h-full flex flex-col">
@@ -50,19 +51,19 @@ export default function Badge({
             </div>
             <div className="flex-1">
               <div className="text-sm font-semibold">{it.title}</div>
-              {it.desc && <div className="text-xs opacity-70">{it.desc}</div>}
+              {it.desc ? <div className="text-xs opacity-70">{it.desc}</div> : null}
             </div>
           </div>
         ))}
       </div>
 
-      {/* Progress (اختياري) */}
+      {/* Progress */}
       {total > 0 && (
         <div className="px-5 pb-5">
           <div className="mb-2 flex items-center justify-between text-xs opacity-75">
             <span>Progress</span>
             <span className="md:hidden">
-              {done}/{total} ({pct}%)
+              {(progress?.done ?? done)}/{total} ({pct}%)
             </span>
           </div>
           <div className="relative h-3 rounded-full bg-white/8 overflow-hidden">
@@ -72,7 +73,7 @@ export default function Badge({
               style={{ width: `${pct}%` }}
             />
             <div className="absolute inset-0 flex items-center justify-center text-[11px] font-medium">
-              {done}/{total} ({pct}%)
+              {(progress?.done ?? done)}/{total} ({pct}%)
             </div>
           </div>
         </div>
