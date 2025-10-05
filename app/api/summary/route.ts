@@ -258,17 +258,18 @@ async function isContract(addr: string) {
 }
 
 /* ========= name/address resolver ========= */
-async function resolveAddressOrName(input: string | null) {
+// أهم تعديل هنا: نُعيد نوع template literal ليتماشى مع دوال viem/getBasenameFor
+async function resolveAddressOrName(input: string | null): Promise<`0x${string}` | null> {
   if (!input) return null;
   const s = input.trim();
-  if (s.startsWith("0x") && isAddress(s as `0x${string}`)) return s.toLowerCase();
+  if (s.startsWith("0x") && isAddress(s as `0x${string}`)) return s.toLowerCase() as `0x${string}`;
   if (s.includes(".")) {
     try {
       const r = await fetchWithTimeout(`https://api.ensideas.com/ens/resolve/${encodeURIComponent(s)}`);
       if (!r.ok) return null;
       const j = await r.json().catch(() => null);
       const addr = j?.address || j?.addr;
-      if (addr && isAddress(addr as `0x${string}`)) return (addr as string).toLowerCase();
+      if (addr && isAddress(addr as `0x${string}`)) return (addr as string).toLowerCase() as `0x${string}`;
     } catch {}
   }
   return null;

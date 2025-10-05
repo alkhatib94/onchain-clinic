@@ -36,8 +36,9 @@ export default function Referrals({
       {/* Header */}
       <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between">
         <div className="text-[15px] font-semibold">Referrals</div>
+        
         <div className="text-sm opacity-70">
-          Relays: {relayCount}, Jumpers: {jumperCount}, Bungees: {bungeeCount}, Across: {acrossCount}
+          Relays: {relayCount},Jumpers: {jumperCount}, Bungees: {bungeeCount}, Across: {acrossCount}
         </div>
       </div>
 
